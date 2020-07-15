@@ -1,5 +1,5 @@
 # Cygnus X-1
-## Emerging view of a 21-solar mass black hole in the Milky Way
+Emerging view of a 21-solar mass black hole in the Milky Way
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.1252036.svg)](https://doi.org/10.5281/zenodo.1252036) 
 (placeholder, will be added when released)
