@@ -10,6 +10,9 @@ This repository contains computational material developed/utilized in Miller-Jon
 
 ## Contents:
 - [Cyg_X1_astrometric_analysis.ipynb](https://github.com/bersavosh/Cygx1_JMJ2020/blob/master/Cyg_X1_astrometric_analysis.ipynb): This notebook details the bayesian inference used to derive the astometric paramters based on the VLBA data presented in Table 2 in the paper.
+
+## Other resources:
+- Simulations in the paper made use of the [COMPAS](http://github.com/TeamCOMPAS/COMPAS) rapid population synthesis code.
+
 - Jerry's code:
 - Janusz's code:
-- Ilya's model:
