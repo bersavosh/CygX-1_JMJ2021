@@ -1,0 +1,89 @@
+cbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+cbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+cbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+c
+c  Begin of the file "center.s37"                     date: September 30, 1991
+c
+c        The subroutine "center" computes values of all variables at the
+c        surface of a small inner core. These values are used to prepare 
+c        the inner boundary conditions.
+c
+c.............................................................................
+c
+      subroutine center(rhclg,tclg,xvec,dtinv,dlogt,dlogrh,rescen)
+      implicit double precision(a-h,o-z)
+      include 'data.s37'
+      dimension rescen(m2)
+c
+c subject:
+c     compute values at the surface of the innermost sphere
+c input:
+c     rhclg    = log10 (central density)               [g/cm**3]
+c     tclg     = log10 (central temperature)           [K]
+c     xvec     = vector of chemical content: xvec(1) = hydrogen (by mass) etc.
+c     dtinv    = 1 / the current time step             [1/s]
+c     dlogt    = change of log10 (temperature) during the current time step
+c     dlogrh   = change of log10 (density) during the current time step
+c output
+c     rescen(1) = log10 (density)                      [g/cm**3]
+c     rescen(2) = log10 (temperature)                  [K]
+c     rescen(3) = log10 (radius)                       [cm]
+c     rescen(4) = luminosity / luminosity unit
+c     rescen(5) = mass / total stellar mass
+c     rescen(6) = hydrogen content                     [by mass fraction]
+c     rescen(7) = helium content                       [by mass fraction]
+c     rescen(8..5+nx) = subsequent elements content    [by mass fraction]
+c predefined in 'data.s37'
+c     fln10, pi, fmcen
+c common /heninc/
+c     flunit  = luminosity unit, close to maximum or surface lumin.  [erg/s]
+c     fmtot   = total stellar mass                                   [g]
+c called:
+c     nburn      to calculate luminosity at the inner boundary
+c     state      to calculate thermodynamic functions
+c notice:
+c     time changes in central temperature and density are already included
+c     in "tclg" and in "rhclg"
+c auxiliary variables:
+c     rhc     = central density                        [g/cm**3]
+c     tc      = central temperature                    [K]
+c     rc      = radius of the central sphere           [cm]
+c     epsx    = energy generation rate in hydrogen burning           [erg/g/s]
+c               + neutrino energy loss rate (if hydrogen content = 0)
+c.............................................................................
+
+      dimension  extra(20),xvec(nx),dxtvec(nx)
+
+c                         --- calculate variables at the surface of the inner
+c                             sphere, i.e. inner boundary conditions
+      rhc=10.**rhclg
+      tc=10.**tclg
+
+      call nburn(rhc,tc,xvec,epsx,dxtvec)
+      call state(rhc,tc,xvec,extra)
+      qt   = extra(7)
+      qr   = extra(8)
+
+      rc=(fmcen*fmtot*3/(4*pi*rhc))**(1./3.d0)
+
+c                           --- set results
+      rescen(1)=rhclg
+      rescen(2)=tclg
+      rescen(3)=log10(rc)
+      rescen(4)=fmcen*fmtot/flunit*
+     #          (epsx-dtinv*fln10*(dlogt*qt-dlogrh*qr))
+      rescen(5)=fmcen
+      do 1 i=1,nx
+      rescen(5+i)=xvec(i)
+    1 continue
+c                           --- all variables at the surface of the innermost
+c                               sphere are ready
+c                           --- end of "center"
+      end
+c
+c..............................................................................
+c        This file contains the subroutine "center"
+c                                                 end of the file "center.s37"
+ceeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+ceeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+ceeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee

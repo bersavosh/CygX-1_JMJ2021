@@ -1,0 +1,1570 @@
+cbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+cbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+cbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+c
+c  Begin of the file "nuclear.s37"                    date: July 16, 1996
+c
+c   "nuclear.s37" calculates nuclear reaction rates for p-p chain and CN cycle
+c                 + neutrino energy loss rate (if hydrogen content = 0)
+c
+c  The first six subroutines are based on versions by Stephen J.Ratcliff(1986)
+c  The Yale-Bahcall subroutine "Energy" has been kindly made available to me
+c  by John N. Bahcall.
+c
+c        This file contains ...
+c    subroutine:        subject:
+c    -----------        --------
+c
+c   - "nburn"  -  calculates actual hydrogen burning rates
+c                     SUBROUTINES CALLED:
+c                     - "tabrat" -
+c                     - "screen"
+c                     - "neu" -
+c   - "neu"    -  calculates neutrino energy loss rate(if hydrogen content=0).
+c                     SUBROUTINE CALLED:
+c                     - "neutrn" -
+c   - "neutrn" -  calculates neutrino energy loss rate(if hydrogen content=0).
+c   - "screen" -  calculates screening corrections
+c   - "tabrat" -  calculates nuclear reaction rates to make a table
+c                 for future use in subroutine "burn"
+c                     SUBROUTINES CALLED:
+c                     - "crates" -
+c                     - "Energy" -
+c   - "crates" -  calculates nuclear reaction rates
+c   - "Energy" -  calculates nuclear reaction rates
+c..............................................................................
+c
+      subroutine nburn(rh,t,xvec,epsx,dxtvec)
+c
+c subject:
+c     calculate hydrogen burning rates
+c              + neutrino energy loss rate (if hydrogen content = 0).
+
+c     The method of computing nuclear reactions is adopted from:
+c     Donald D. Clayton - "Principles of Stellar Evolution
+c                          and Nucleosynthesis"
+
+c     Nuclear reaction data are updated according to:
+
+c     Fowler, W.A., Caughlan, G.R., Zimmerman, B.A., 
+c                          1975, Ann. Rev. Astron. Astrophys., p.69.
+c     Harris, M.J., Fowler, W.A., Caughlan, G.R., Zimmerman, B.A., 
+c                          1983, Ann. Rev. Astron. Astrophys., Vol.21, p.165.
+c     Bahcall, J.N., Ulrich, R.K.,
+c                          1988, Rev. Mod. Phys., Vol.60, No.2, p.297.
+c     Bahcall, J.N., & Pinsonneault, M.H.       (subroutine "Energy")
+c                    1992, Rev. Mod. Phys., vol.64, No.4, p.885.
+c     Bahcall, J.N., & Pinsonneault, M.H.
+c                    1995, May, preprint:
+c                    Solar Models with Helium and Heavy Element Diffusion,
+c                    to appear in the October 1995 issue of Rev. Mod. Phys.
+c
+c     The following treatment of PP chains is rather simplified, i.e.:
+c     (i)  H2, Li7, Be7 and He3 (!) contents are always equal to their local
+c          equilibrium values
+c     (ii) energy generation rate of the N14 + p reaction represents
+c          the energy output from the whole CNO cycle, with an initial
+c          N14 content being the sum of primordial C12 and N14 abundances.
+c     Only an evolution of H and He4 profiles is followed explicitly.
+c     It has to be changed, if one wants to follow a more detailed evolution
+c     of element (like He3) abundances in stars where mixing of matter occurs,
+c     and/or where the He3 content has not reached an equilibrium value yet,
+c     especially in low-mass stars.
+c     The N14(P,G)O15 reaction represents the CN cycle, with N14 content
+c     being the sum of primordial C12 and N14 abundances.
+c     The appropriate changes have also to be introduced into subroutine
+c     "profil" and other subroutines using/changing chemical composition
+c     vectors "xvec" and dxtvec", like subroutine "state" and (possibly) others
+
+c     WARNING: Avogadro's numbers, Na's, included implicitly in the Fowler's 
+c              et al. tables (1975: Na=6.0222e23, 1983: Na=6.02205e23) differ
+c              slightly from that adopted implicitly in "data.s37" (1/a.m.u.=
+c              Na=6.022137e23).
+c              I did not think it necessary to take these differences into
+c              account as they are small compared to other physical uncertain-
+c              ties in the nuclear reaction rates.
+c     
+c input:
+c     rh  = density (g/cm**3)
+c     t   = temperature (K)
+c     xvec= vector of chemical content (mass fraction)
+c
+c     predefined in "data.s37": nx,endhco,evolt,amu,ahyd,ahe3,ahe4,an14
+c
+c output:
+c     epsx      = energy generation rate in nuclear reactions    [erg/g/s]
+c                 (only pp chain and N14 + p hydrogen burning included)
+c                 + neutrino energy loss rate (if hydrogen content = 0)
+c     dxtpp     = hydrogen    depletion rate   (the pp chain)    [1/s]
+c     dxtcn     = hydrogen    depletion rate  (the CNO cycle)    [1/s]
+c     dxtvec(1) = hydrogen    depletion rate  ( = dxtpp + dxtcn) [1/s]
+c     dxtvec(2) = helium-3    depletion rate  (= 0 in this version)   [1/s]
+c auxiliary variables:
+c     epscn   = energy generation rate in CN cycle               [erg/g/s]
+c     epspp   = energy generation rate in p-p chain              [erg/g/s] 
+c     eps     = epspp + epscn                                    [erg/g/s]
+c     x       = hydrogen content (mass fraction)
+c     y       = helium   content (mass fraction)
+c     z       = metal    content (mass fraction)
+c.............................................................................
+      implicit double precision (a-h,o-z)
+      include 'data.s37'
+      dimension xvec(nx), dxtvec(nx)
+        real*8 mue,h12b10(5),bh12(5)
+c     - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+c the following energy releases [MeV] are taken from the Bahcall's sbr."Energy"
+        parameter (q11   =6.664d0,          q33=12.860d0)
+        parameter (q34ii =1.586d0+17.394d0)
+        parameter (q34iii=1.586d0+11.499d0)
+        parameter (qqn14  =3.457372d0+7.550628d0+9.054d0)
+        parameter (qqc12  =4.966d0,       qqo16=12.128d0)
+c     - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+        parameter (flogt0=6.20d0,fdelt=0.02d0)
+c               rh1(i) <-> flogt0 + i*fdelt etc.
+        common/rattab/rh1(100),rhe3(100),rhe4(100),pp3pp2(100),
+     *                rn14(100),alpha(100),beta(100),gamma(100),inuc
+        save /rattab/
+c   Rates in common/rattab/ are the decimal logs of the
+c   actual (unscreened) rates.
+c ---------------------------------
+      if (inuc.ne.99) call tabrat
+c ---------------------------------
+c                            --- if temperature is below tenuc the burning
+c                                rate is fixed at 1.0e-30
+      dxtvec(1)=-1.d-30
+           epsx= 1.d-30
+        com(19)= 1.d-30
+        com(20)= 1.d-30
+      if(t.lt.tenuc) return
+
+      if(xvec(1).gt.endhco)then
+c --------------------------------------------------------  x > endhco: begin
+        constt = evolt*1.d6/amu
+        q1     =    q11*constt
+        q3     =    q33*constt
+        q4ii   =  q34ii*constt
+        q4iii  = q34iii*constt
+        qc12   =  qqc12*constt
+        qn14   =  qqn14*constt
+        qo16   =  qqo16*constt
+c
+        tem = log10(t)
+        fact = (tem-flogt0)/fdelt
+        it = fact
+        if (it .le. 1) it = 1
+        if (it .gt. 99) it = 99
+        fact = fact-it
+        cfact = 1.0d0-fact
+        itplu1 = it+1
+c
+        rh1k   = cfact*rh1(it) + fact*rh1(itplu1)
+        rhe3k  = cfact*rhe3(it) + fact*rhe3(itplu1)
+        rhe4k  = cfact*rhe4(it) + fact*rhe4(itplu1)
+        rn14k  = cfact*rn14(it) + fact*rn14(itplu1)
+        alphak = cfact*alpha(it) + fact*alpha(itplu1)
+        pp3p2k = cfact*pp3pp2(it) + fact*pp3pp2(itplu1)
+c-------------------------------------------------------- screening: begin
+        x    = xvec(1)
+c        xhe3 = xvec(2)
+        xhe4 = xvec(3)
+        xn14 = xvec(6)
+        mue  = 2.d0/(1.d0+x)
+c
+c ------------------------------------------------
+        call screen(x,log(rh),log(t),h12b10,bh12)
+c ------------------------------------------------
+        rh1k   = 10.0d0**(rh1k     + h12b10(1))
+        rhe3k  = 10.0d0**(rhe3k    + h12b10(2))
+        rhe4k  = 10.0d0**(rhe4k    + h12b10(2))
+        rn14k  = 10.0d0**(rn14k    + h12b10(4))
+        alphak = 10.0d0**(alphak   + h12b10(4))
+        pp3p2k = 10.0d0**(pp3p2k   + h12b10(3))*x*mue/ahyd
+c-------------------------------------------------------- screening: end
+c
+      if(rh1k.lt.0.d0.or.rhe3k.lt.0.d0.or.rhe4k.lt.0.d0)stop 'abc<0'
+c
+c ===================================================== modified due to "04"
+c     The following method is adopted from:
+c     Donald D. Clayton - "Principles of Stellar Evolution
+c                          and Nucleosynthesis"
+
+c      al = he3he4/he3he3*he3he4/h1h1*(y/ahe4*ahyd/x)**2
+      al = rhe4k/rhe3k*rhe4k/rh1k*(xhe4/ahe4*ahyd/x)**2        ! due to "04"
+c      if(al.gt.1.d8)then
+      if(al.gt.5.d7)then
+        fa = 2.d0
+      else
+        fa = 1.d0-al+sqrt(al*(al+2.d0))
+      end if
+      fpp1 = (sqrt(1.d0+2.d0/al)-1.d0)/(sqrt(1.d0+2.d0/al)+3.d0)
+      if(1.d0-fpp1.lt.1.d-12)then
+        fpp1 = 1.d0
+        fpp2 = 0.d0
+      else
+c        fpp2 = (1.d0-fpp1)*(1.d0/(1.d0+be7h1*x*fme/be7e/ahyd))
+        fpp2 = (1.d0-fpp1)*(1.d0/(1.d0+pp3p2k))                ! due to "04"
+      end if
+      fpp3 = 1.d0 - fpp1 - fpp2
+      if(fa.lt.1.d0.or.fa.gt.2.d0.or.fpp1.lt.0.d0.or.fpp1.gt.1.d0.or
+     $.fpp2.lt.0.d0.or.fpp2.gt.1.d0.or.fpp3.lt.0.d0.or.fpp3.gt.1.d0)
+     $then
+      write(*,*)al,fa,fpp1,fpp2,fpp3
+      stop ': file "nuclear.s37" - subroutine "nburn" - chains'
+      end if
+
+      epspp = (4.d0*ahyd-ahe4)*amu*clight**2
+      epspp = epspp*(.980d0*fpp1+.960d0*fpp2+.743d0*fpp3)
+c      epspp = epspp*h1h1*rh*x**2*fa/4.d0/amu/ahyd**2
+      epspp = epspp*rh1k*rh*x**2*fa/4.d0/amu/ahyd**2           ! due to "04"
+
+c        q14 = 25.028d6*evolt
+c      epscn = q14*h1n14*rh/amu*zn/14.d0*x/ahyd
+        f3     = 1.d0/(1.d0+alphak/rn14k)                      ! due to "04"
+        q14    = (qn14 + f3*qc12 + (1.d0-f3)*qo16)*amu         ! due to "04"
+        epscn  = q14*rn14k*rh/amu*xn14/an14*x/ahyd             ! due to "04"
+      
+        eps = epscn + epspp
+        eni = 0.
+c        dxtpp = - rh*h1h1*x**2*fa/ahyd
+        dxtpp = - rh*rh1k*x**2*fa/ahyd                         ! due to "04"
+        dxtcn = - epscn/q14*ahyd*amu*4.d0
+        dxtvec(1) = dxtpp + dxtcn
+        com(19) = - dxtpp/x/x
+        com(20) = - dxtcn/x
+c ===========================================================================
+c --------------------------------------------------------  x > endhco: end
+      else
+c --------------------------------------------------------  x < endhco: begin
+        eps=0.
+c                            --- neutrino energy losses
+c --------------------------
+        call neu(rh,t,eni)
+c --------------------------
+c --------------------------------------------------------  x < endhco: end
+      end if
+c
+      epsx=eps-eni
+c                            --- end of "nburn"
+      end
+c
+c............................................................................
+c  The following subroutine is based on a version by Stephen J. Ratcliff (1986)
+c
+      subroutine neu(den,tem,eni)
+c ---------------------------------------------------------------------------
+c   input:
+c     den    = density                           [g/cm**3]
+c     tem    = temperature                       [K]
+c   output:    eni  - neutrino energy loss rate  [erg/g/s]
+c   subroutines required:     NEUTRN
+c ---------------------------------------------------------------------------
+      implicit real*8 (a-h,o-z)
+      implicit integer*4 (i-n)
+c
+      COMMON/ntrns/ENIU(31,41),inmemo
+c  ------------------------------
+		save /ntrns/
+c
+      if(inmemo.ne.99)go to 1
+    2 continue
+      TL=log10(tem)*20.0d0
+      IT=INT(TL)
+      IF(IT.LT.150)IT=150
+      IF(IT.GT.179)IT=179
+      FT=TL-IT
+      IT=IT-149
+c
+      RL=log10(den)*5.0d0
+      IR=INT(RL)
+      IF(IR.LT.10)IR=10
+      IF(IR.GT.49)IR=49
+      FR=RL-IR
+      IR=IR-9
+c
+      ENI1=eniu(IT,IR)
+      ENI2=eniu(IT,IR+1)
+      ENI3=eniu(IT+1,IR)
+      ENI4=eniu(IT+1,IR+1)
+c
+      ENNI   =(1.0d0-FT)*((1.0d0-FR)*ENI1+FR*ENI2)
+     *             +FT*((1.0d0-FR)*ENI3+FR*ENI4)
+c
+      eni=10.d0**ENNI
+c
+      return
+    1 continue
+c
+C CALCULATION OF NEUTRINO EMISSION
+c
+      FMIE=2.0d0
+c
+      DO 11 IRHO=1,41
+      RL=0.2d0*IRHO+1.8d0
+      RHO=10.0d0**RL
+c
+      DO 11 IT=1,31
+      TL=0.05d0*IT+7.45d0
+      T=10.0d0**TL
+c
+      CALL NEUTRN (RHO,T,FMIE,EPAIR,EPHOTO,EPLAS,ETOT)
+      ENIU(IT,IRHO)=log10(ETOT)
+c
+   11 CONTINUE
+c
+      WRITE(*,100)
+  100 format('+','CALCULATION OF NEUTRINO EMISSION IS FINISHED ')
+C --------------------------------------------------------------------------
+      inmemo=99
+      go to 2
+      END
+c............................................................................
+c  The following subroutine is based on a version by Stephen J. Ratcliff (1986)
+c
+      SUBROUTINE NEUTRN(RHO,T,MIE,EPAIR,EPHOTO,EPLAS,ETOT)
+c ---------------------------
+c   input:
+c       RHO     density                         [c.g.s.]
+c       T       temperature                     [K]
+c       MIE     mu sub e = mean # of nucleons per electron, ~= 2/(1+X)
+c   output:
+c       EPAIR   neutrino emission rate(erg/g/s) (pair formation)
+c       EPHOTO     "        "            "      (photo neutrinos)
+c       EPLAS      "        "            "      (plasma osc.)
+c       ETOT       "        "            "      (total)
+c ------------------------------
+c   ref. Beaudet et. al. 1967 Ap J v.150 p.979
+c---------------------------------------------------------------------------*
+      implicit real*8 (a-h,o-z)
+      implicit integer*4 (i-n)
+      real*8 LAMB,LAMB2,KSI,MIE
+      DIMENSION    A0(3),A1(3),A2(3),B1(3),B2(3),B3(3),C(3),F(3)
+      DATA A0/6.002d 19,4.886d 10,2.320d- 7/,
+     *A1/2.084d 20,7.580d 10,8.449d- 8/,
+     *A2/1.872d 21,6.023d 10,1.787d- 8/,
+     *B1/9.383d- 1,6.290d- 3,2.581d- 2/,
+     *B2/-4.141d- 1,7.483d- 3,1.734d- 2/,
+     *B3/5.829d- 2,3.061d- 4,6.990d- 4/,
+     *C/5.59240d0,1.56540d0,0.56457d0/
+c
+      LAMB=T/5.9302d9
+      LAMB2=LAMB*LAMB
+      ROM=RHO/MIE
+      KSI=(ROM*1.0d-9)**(1.d0/3.d0)/LAMB
+c
+      DO 1 I=1,3
+      TEST=((A2(I)*KSI+A1(I))*KSI+A0(I))
+      DD=C(I)*KSI/80.0d0
+      JJ=DD
+      DIF1=DD-JJ
+      IF(DD.LE. 1.0d0) GO TO 12
+      E=exp(-80.0d0)
+      F(I)=TEST
+c
+      DO 4 J=1,JJ
+      IF((log10(F(I))+log10(E)).LE.-35.0d0) GO TO 6
+      F(I)=F(I)*E
+    4 CONTINUE
+c
+      FRAC1=exp(-DIF1)
+      IF((log10(F(I))+log10(FRAC1)).LE.-35.0d0) GO TO 6
+      F(I)=F(I)*FRAC1
+      GO TO 5
+c
+    6 F(I)=1.0d-35
+c
+    5 FF=(KSI**3+((B3(I)/LAMB+B2(I))/LAMB+B1(I))/LAMB)
+      IF((log10(F(I))-log10(FF)).LE.-35.0d0) GO TO 15
+      F(I)=F(I)*FF
+      GO TO 1
+c
+   15 F(I)=1.0d-35
+      GO TO 1
+c
+   12 CONTINUE
+      FF=(KSI**3+((B3(I)/LAMB+B2(I))/LAMB+B1(I))/LAMB)
+      ECK=exp(-C(I)*KSI)
+      IF((log10(TEST)+log10(ECK)-log10(FF)).LE.-35.d0) GO TO 15
+      F(I)=TEST*ECK/FF
+c
+    1 CONTINUE
+      EP=((((918.6d0*LAMB2+1534.0d0)*LAMB2+133.5d0)*LAMB2-13.04d0)
+     $*LAMB2+1.d0)
+      IF((log10(EP)+log10(F(1))-log10(RHO)).LE.-35.d0) GO TO 16
+      EPAIR=EP*F(1)/RHO
+      GO TO 17
+c
+   16 EPAIR=1.0d-35
+   17 D=(2.0d0/LAMB)/80.d0
+      N=D
+      DIF=D-N
+      IF(D.LE.1.0d0) GO TO 13
+      E=exp(-80.0d0)
+      DO 2 I=1,N
+      IF((log10(EPAIR)+log10(E)).LE.-35.0d0) GO TO 3
+c
+      EPAIR=EPAIR*E
+    2 CONTINUE
+      FRAC=exp(-DIF)
+      IF((log10(EPAIR)+log10(FRAC)).LE.-35.0d0) GO TO 3
+c
+      EPAIR=EPAIR*FRAC
+      GO TO 7
+c
+    3 EPAIR=1.0d-35
+      GO TO 7
+c
+   13 IF((log10(EPAIR)+log10(exp(-2.d0/LAMB))).LE.-35.d0)GO TO 3
+c
+      EPAIR=EPAIR*exp(-2.0d0/LAMB)
+    7 CONTINUE
+      IF((log10(F(2))+5*log10(LAMB)-log10(MIE)).LE.-35.d0)
+     $GO TO 30
+c
+      EPHOTO=F(2)*LAMB**5/MIE
+      GO TO 31
+c
+   30 EPHOTO=1.0d-35
+   31 CONTINUE
+      IF((log10(F(3))+2*log10(ROM)-log10(MIE)).LE.-35.d0)
+     $ GO TO 40
+c
+      EPLAS=F(3)*ROM*ROM/MIE
+      GO TO 41
+c
+   40 EPLAS=1.0d-35
+   41 CONTINUE
+C
+C CORRECTION FACTORS BY RAMADURAI (1976,MNRAS,176:9)
+C TO TAKE NEUTRAL CURRENTS INTO ACCOUNT
+C
+      ETOT=1.48d0*EPAIR+0.66d0*EPHOTO+1.48d0*EPLAS
+      RETURN
+      END
+c.............................................................................
+c.............................................................................
+        subroutine screen(xh1,rho,t,h12b10,bh12)
+c ------------------------------------------------------------
+c   input:
+c               xh1             x
+c               rho             ln density
+c               t               ln temp
+c   output:
+c               h12b10          h12/ln10
+c               bh12            b * h12
+c-------------------------------------------------------------
+      implicit double precision (a-h,o-z)
+      implicit integer*4 (i-n)
+        real*8 zbar,mue,ztwidl,eta,thetae,lambda
+        real*8  h12b10(5),bh12(5),h12
+        real*8  zetaw(5),zetai(5),z3bm1,etab,b
+        data zetaw/2.d0,8.d0,8.d0,14.d0,16.d0/
+        data zetai/1.63d0,5.92d0,5.78d0,9.52d0,10.72d0/
+c
+c               weak  ( and intermediate !!!) screening
+c   reference:  Graboske et al. ApJ 181
+c   zbar, ztwidl : assume all the ions are H+, He++
+c   make a rough approx. for f'/f as function of eta=degen. param.
+c
+        fmod=1.d0/log(10.d0)
+        zbar = 2.d0*(1.d0+xh1)/(1.d0+3.d0*xh1)
+        mue = 2.d0/(1.d0+xh1)
+        eta = 2.97d5*(mue**(-2.d0/3.d0))*exp(2.d0/3.d0*rho-t)
+        if (eta .le. 1.d0) then
+                thetae = 1.0d0-0.26d0*eta
+        else
+                thetae = 0.74d0-0.64d0*log10(eta)
+                if (thetae .lt. 0.0d0) thetae = 0.0d0
+        end if
+        ztwidl = sqrt(zbar*(mue+thetae))
+c
+c   in our approx., sum(i)(zi**2 * fi) = zbar*mue
+c
+        lambda = 1.88d8/sqrt(mue*zbar)*exp((rho-3.d0*t)/2.d0)
+        z3bm1 = zbar*(1.d0+mue)/2.d0
+        etab = z3bm1/(ztwidl**0.58d0)/(zbar**0.28d0)
+c
+        do 10 i=1,5
+                h12 = 0.5d0 * ztwidl * zetaw(i) * lambda
+                b = 1.d0
+                if (h12 .gt. 0.03d0) then
+c ".03" instead of ".1" has been adopted, according to the Yale/Bahcall
+c subroutine "energy".
+                        b = 0.860d0
+                        h12 = 0.38d0 * etab * zetai(i) * lambda**0.860d0
+                end if
+                h12b10(i) = h12*fmod
+                bh12(i)   = b * h12
+   10           continue
+c
+c  screening factor for He3 - H1 (hep) reaction
+c
+      h12hep=ztwidl*2.d0*lambda
+      if(h12hep.gt.0.1d0)h12hep=1.17d0*etab*lambda**0.86d0
+      h12hep=h12hep*fmod
+        return
+        end
+c.............................................................................
+c
+      subroutine tabrat
+c   output:
+c                       common block /rattab/
+c-------------------------------------------------------------
+      implicit double precision (a-h,o-z)
+      implicit integer*4 (i-n)
+      real*8        n14h1,n15h1c,n15h1o,logt
+      common/cnorat/o17h1n,o17h1f
+      common/rattab/rh1(100),rhe3(100),rhe4(100),pp3pp2(100),
+     *                rn14(100),alpha(100),beta(100),gamma(100),inuc
+      parameter(flogt0=6.20d0,fdelt=0.02d0)
+            save /cnorat/,/rattab/
+        inuc = 99
+c
+        fac1    = 1.d0
+        fac2    = 1.d0
+        fac3    = 1.d0
+        faco17  = 1.d0
+c
+c   the actual values of fac1,fac2 used for n15h1 -> c12he4
+c   rate make little difference
+c
+        do 100 i=1,100
+                logt = flogt0 + dble(i)*fdelt
+                t = 10.0d0**logt
+c the subroutine "crates" is called to calculate  O17 burning rates
+      call crates(t,fac1,fac2,fac3,faco17)
+      call Energy(0.d0,logt,1.d0,0.d0,0.d0,0.d0,0.d0,0.d0,0.d0,
+     $h1h1,he3he3,he3he4,be7e,be7h1,
+     $n14h1,n15h1c,n15h1o,o16h1)
+c it has been checked (see a program "energy.for") that values
+c of the "h1h1....o16h1" depend on temerature only (as it should be...)
+                rh1(i)    = log10(h1h1)
+                rhe3(i)   = log10(he3he3)
+                rhe4(i)   = log10(he3he4)
+                pp3pp2(i) = log10(be7h1/be7e)
+c
+                rn14(i)  = log10(n14h1)
+                alpha(i) = log10(n14h1*n15h1o/n15h1c)
+                beta(i)  = log10(o17h1n+o17h1f)
+                gamma(i) = log10(o16h1)
+  100           continue
+        return
+        end
+c.............................................................................
+c
+        subroutine crates(t,fac1,fac2,fac3,faco17)
+c --------------------------------
+c   calculate nuclear burning rates
+c ----
+c   input:
+c       t               temperature(K)
+c       fac1,fac2,fac3,faco17
+c                       various uncertain multiplicative factors
+c   output:
+c                       common block /cnorat/
+c-------------------------------------------------------------
+      implicit double precision (a-h,o-z)
+      implicit integer*4 (i-n)
+      common/cnorat/o17h1n,o17h1f
+       save /cnorat/
+c
+        t9 = t/1.d9
+        t913 = t9**(1.d0/3.d0)
+        t923 = t913*t913
+        t943 = t923*t923
+        t953 = t9*t923
+        t912 = sqrt(t9)
+        t932 = t9*t912
+        t956 = t912*t913
+        t976 = t912*t923
+c
+        tt = t9/(1.0d0+2.69d0*t9)
+        tt13 = tt**(1.d0/3.d0)
+        tt56 = tt13*sqrt(tt)
+c
+        t92 = t9*t9
+        t93 = t92*t9
+c
+        o17h1n=1.d0+.025d0*t913+5.39d0*t923 + 0.940d0*t9 + 13.5d0*t943
+     *              + 5.98d0*t953
+        o17h1n =o17h1n*1.53d7/t923*exp(-16.712d0/t913-(t9/0.565d0)**2)
+        o17h1n = o17h1n + 2.92d6*t9*exp(-4.247d0/t9)
+        o17h1n = o17h1n + fac3 * (4.81d10*t9*exp(-16.712d0/t913
+     *          -(t9/0.040d0)**2) + 5.05d-5/t932*exp(-0.723d0/t9))
+        o17h1n = o17h1n + faco17*1.31d1/t932*exp(-1.961d0/t9)
+c
+        o17h1f = 1.d0 + .025d0*t913 - .051d0*t923 - 8.82d-3*t9
+        o17h1f = o17h1f * 1.51d8/t923*exp(-16.712d0/t913)
+        o17h1f = o17h1f + 7.97d7*tt56/t932*exp(-16.712d0/tt13)
+        o17h1f = o17h1f + 1.56d5/t9*exp(-6.272d0/t9)
+        o17h1f = o17h1f + faco17 * 1.31d1/t932*exp(-1.961d0/t9)
+c
+        return
+        end
+c.............................................................................
+
+c--------------------------------------------------changed by R.Sienkiewicz
+c Revised Aug 9, 1993
+c Revised Feb 24,1996
+c some changes have been introduced to the Yale subroutine (previously
+c revised and corrected by John Bahcall) to incorporate this subroutine
+c with  the "h04" code.
+c  The subroutine variable list has been changed. Now, the only extracted
+c  quantities are:
+c
+c              h1h1,he3he3,he3he4,be7e,be7h1,n14h1,n15h1c,n15h1o,o16h1.
+c
+c  These quantities are equal to Na*<01> for each "01" reaction (see Fowler,
+c  Caughlan, & Zimmerman 1975, A.R.A.A, p.69), and they depend on temperature
+c  only. However, there are still some other input parameters on the variable
+c  list, which are not used in the present version.
+c--------------------------------------------------changed by R.Sienkiewicz
+
+c The following subroutine calculates the nuclear reaction rates with
+c   special attention to detail required for calculating solar neutrino
+c   fluxes. The neutrino fluxes are evaluated also in this subroutine.
+c
+c
+c All physical quantities are cgs. The reaction rates are in
+c  gm^{-1}s^{-1}.
+c
+c  Last change:
+c   I made some purely cosmetic changes on 1/20/96.
+c
+c
+c All numbers in this subroutine have been calculated by John Bahcall
+c  so that they agree with the modern numbers in Neutrino
+c  Astrophysics (1989) or much more recent results, as indicated in
+c  comments lines.
+c
+c
+c The original structure of this  subroutine ia based upon the  Yale
+c  energy generation  subroutine.  However, I have made  changes and
+c  improvements in the physics, in the coding, in the input
+c  parameters, and in the reactions that are taken into account.
+c  In practice, the only feature that was preserved from the original
+c  subroutine is the interface to the external program. Also, I have
+c  added calculations of the neutrino fluxes, which is the reason
+c  that I began this work.
+c
+c  I include many comment statements in order to make the program
+c  transparent and simple to revise.
+c
+c Some statements have been added to simplify the process of revising
+c  the subroutine as improved data become available.  For example, I have
+c  inserted explicitly the standard cross section factors in a way that
+c  it is easy to revise:
+c
+c  SStandard(I) = 1.0 when the Ith cross section has the standard value.
+c
+c  The standard values of SStandard(I) used here are those that given in
+c   Table 1 of Bahcall and Pinsonneault (1992).  Published in the
+c   Reviews of Modern Physics, 64,885, 1992.
+c
+c The nuclear energy release to the star from each reaction
+c  is taken from Bahcall and Ulrich, RMP 60, 297 (1988) and takes account
+c  accurately of neutrino energy loss.
+c
+c I have added a new section at the end of the subroutine that
+c  calculates the solar neutrino fluxes at the Earth.  These fluxes
+c  are in the units of cm^-2 sec^-2 per gm. To get the flux
+c  from a shell, multiply by the mass of the shell in units of
+c  grams.  The fluxes are in a common block, Fluxes.  I also calculate
+c  the fictional neutrino fluxes associated with the He3 + He3 and with
+c  the He3 + He4 rections; these fictional fluxes are useful diagnostics
+c  of the solar model.
+c
+c Weakscreening is a parameter passed in the Flux common block. To obtain
+c  the Graboske et al. and Salpeter standard results, use:
+c  weakscreening = 0.03.  To investigate the effect of always using
+c  weak screening, use a value for weakscreening greater than unity,
+c  e. g., 30.
+c
+c  The value of SStandard(17) for hep is taken from Carlson et al (1991)
+c  Phys. Rev. C 44, 619. It corresponds to an S sub 0 =
+c  1.3 E-20 keV-barns, a factor of 0.1625  smaller than indicated by the
+c  older measurements and calculations used in Neutrino Astrophysics.
+c
+c *****************************************
+c Changing nuclear reaction cross sections.
+c *****************************************
+c
+c Nuclear cross sections can be changed simply by inserting new numbers
+c  for the Data values of SStandard(I), which are the ratios of the
+c  desired cross section factors to the values given in Tables 3.2 and
+c  3.4 of Neutrino Astrophysics (1989). If the value given in Neutrino
+c  Astrophysics is used, then SStandard(I) = 1.0 .  To increase the cross
+c  section for reaction K by a factor of two compared to the standard
+c  value, set SStandard(K) = 2.0 .  To determine which value of I goes
+c  with which reaction, see the section just below.
+c
+c The energy derivatives enter in a form in which they are divided by
+c  the absolute values of the cross sections at zero energy.  Thus if
+c  the shape of the cross section extrapolation is unchanged and only
+c  the intercept of S(E) at zero energy is changed, then no correction
+c  need be made for the derivatives.  They are automatically scaled
+c  correctly.  The exact way that the derivatives eneter the
+c  calculations is described in the section labeled ``Defining the
+c  Q(I)' that is presented below.
+c
+c ************************************
+c Identifying the reactions.
+c ************************************
+c
+c  The value of J denotes which of the reactions the coefficients
+c  refer to:
+c  J = 1, pp; J = 2, He3+He3; J = 3, He3+ He4; J =4, P + C12;  J = 5,
+c   p+C13; J = 6, p + N14; J = 7, p + O16.
+c
+c  Reactions J = 8, 13 are not relevant for the solar interior; they are
+c   holdovers from the earlier Yale code.
+c  Reaction 14 is pep; reaction 15 is Be7 electron capture; reaction 16
+c   is  Be7 proton capture; reaction 17 is the hep reaction.
+c
+c   Reactions 14-17 were not included in the Yale energy generation
+c   code, but they are most of the story for the solar neutrino problem.
+c
+c   The branching of the N15 + p reactions is treated in a series of
+c    separate statements following the calculation of the Be7 + p
+c    reaction. See the definitions of F3 and F4.  If the cross-section
+c    factors of the N15 + p reactions are revised, then the numerical
+c    coefficients must be changed in the definition of C12alpha and
+c    O16gamma.
+c
+c For Q1(I), ...,Q(5(I), I = 8 corresponds to the Be7 +  p reaction.
+c  This assignment for I = 8 is only valid for the listed Q's and not
+c  for other arrays in the program.
+c
+c IU is the shell number.
+c
+c The user should change the subroutine variable list to correspond to
+c  those quantities that the user wishes to extract.
+c Two examples of the Subroutine labeling are given.
+c  First example:
+      Subroutine Energy(DL,TL,X,Y,XHe3,XC12,XC13,XN14,XO16,
+     $h1h1,he3he3,he3he4,be7e,be7h1,
+     $n14h1,n15h1c,n15h1o,o16h1)
+      implicit double precision (A-H,O-Z)
+      real*8 n14h1,n15h1c,n15h1o
+      DIMENSION XFRAC(13),RATE(13),DRATRO(13),DRATT(13),UTOT(13),
+     1 DSCR (13),DSCT(13),DG(13),ZPRD(13),Z53(13),Z43(13),Z23(13),
+     2 Z86(13),Q1(8),Q2(8),Q3(8),Q4(8),Q5(8),Q6(7),Q7(7),Q8(7),EG(50)
+      DIMENSION ANUC(13), ZNUC(13), SStandard(17),Flux(10)
+c
+c ***************************
+c ANUC are atomic mass units.
+c ***************************
+c
+c They (ANUC(I) ) include the electron masses as well as the nuclear
+c  masses.
+c  The scale is the mass of C12 divided by 12 or 931.49432 MeV,
+c  which is 1.6605402 times 10^{-24} gm. The values are obtained
+c  by dividing the mass excess (expressed in MeV) by 931.49432 MeV and
+c  adding to this the atomic mass number, A.  The value for Be7, which
+c  is used implicitly in this subroutine is, 7.016930.
+c
+      DATA ANUC/1.008665,1.007825,2.014102,3.01605,3.01603,4.002603,12.,
+     1   13.00335,14.00307,15.99491,17.99916,19.99244,23.98504/,ZNUC/0.,
+     2   1.,1.,1.,2.,2.,6.,6.,7.,8.,8.,10.,12./,NELEM/13/
+c
+c The isotopes are neutron, H1, D, H3, He3, He4, C12, C13, N14, O16, O18,
+c  Ne20, Mg24, respectively. All of these numbers were checked.
+c Nelem is the number of isotopes included.
+c
+c *****************
+c Defining the Q(I)
+c *****************
+c **************************************************************************
+c The quantities Q1(J), Q2(J), ...,Q5(J) are the terms in Equation 3.14 of
+c  Neutrino Astrophysics and in EQuation 53 of Fowler, Caughlan, and
+c  Zimmerman (1967) eq. 53, in both cases multiplied by T sub 9 ^(-2/3).
+c  The reactions corresponding to each J are listed above, under:
+c   Identifying the rections.
+c  For this set of parameters, and only for this set of parameters,
+c  J = 8 corresponds to the Be7 + p reaction.
+c **************************************************************************
+c
+c General expression for Q's:
+c
+c T_9^(-2/3)[S_eff/S(0)] =
+c   [T_9^(-2/3) + Q1(I)T_9^(-1/3) + Q2(I) + Q3(I)T_9^(1/3) +
+c    Q4(I)T_9^(2/3) + Q(5)T_9 ]
+c
+c By comparison with Equation 3.14 of Neutrino Astrophysics, we see that
+c
+c  Q1 = (5/(12*tau))*T_9^(-1/3) .
+c  Q2 = (S'/S)(E_0))*T_9^(-2/3) .
+c  Q3 = (S'/S)(35/36)(k*10^9 K)
+c  Q4 = (S''/2S)(E_0^2)(T_9^(-4/3)
+c  Q5 = (89/72)(S''/S)(E_0)(kT)(T_9^(-5/3)
+c
+c Each of the Q's is independent of temperature (T), as can be seen from
+c  Equations 3.10 and 3.11 .
+c
+c All of the values of the Q1, ...., Q5 have been recalculated, using
+c  where needed nuclear cross sections given in Tables 3.2 and 3.4 of Neutrino
+c  Astrophysics.
+c
+c ******************************************************************
+c Q6 is the coefficient of the temperature term in the definition of
+c  tau, equation 3.10 of Neutrino Astrophysics.
+c  tau = -q6*(T sub 9 to the (-1/3) power ).
+c ******************************************************************
+c
+c Slight changes have been made in the previous values of Q6 to make
+c  the data more accurate.
+c Note that q6 is negative.
+c
+c *************************************************
+c Q7 is the constant in front of the reaction rate.
+c *************************************************
+c
+c The general relation is:
+c  Q7 = 70.62860 + ((ln(Z0*Z1/A))/3) -ln(A0*A1) + ln(S sub 0)
+c       -ln(1 + delta_01)
+c  Here S sub 0 is the cross section factor in units of keV-barns.
+c  The numerical values used here are taken from Tables 3.4 and 3.2
+c   of Nuclear Astrophysics.
+c  The quantity delta_01 is non-zero (equal to unity) only when the
+c   two reacting nuclei, 0 and 1, are identical.
+c
+c Q8 reflects a term in the exponential that occurs in the rates, the
+c  term being proportional to e^( constant*T_9^2). See Harris, et al.
+c  1983, Annual Rev. Astron. Astrophys.21, 165 (1983) for the meaning
+c  of this obscure term.
+c
+c The values of Q1(I),...Q7(I) given below were obtained using the data
+c  in Neutrino Astrophysics with the aid of auxilary computer codes
+c  that generated accurate evaluations. The numbers given here are
+c  in many cases completely different from the values in the original
+c  Yale code.
+c
+c NRXNS is the number of reactions being tracked.
+c
+      DATA Q1/0.1231,.0339,.0326,.0304,.0303,.0274,.02494,.040565/,
+     1  Q2/1.079,-.0616,-.2115,.6645,.9601,-.7788,-1.173, -0.3640/,
+     2  Q3/.9304,-.01464,-.04809,.14155,.2041,-.1491,-.205,-0.1034/,
+     3  Q4/0.,0.,0.,3.627,1.394,.2612,.734,0.0/,
+     4  Q5/0.,0.,0.,1.9647,.753,.12717,.3261,0.0/,
+     5  Q6/-3.3796,-12.272,-12.822,-13.6869,-13.7142,-15.2247,-16.6888/,
+     6  Q7/20.8951,76.5995,67.8028,69.1290,70.3799,69.8507,70.8002/,
+     7  Q8/0.,0.,0.,1.0504,0.7874,0.090155,0./,
+     8  NRXNS/13/,C6/2.302585/,
+c--------------------------------------------------changed by R.Sienkiewicz
+c The values of SStandard(I) are to be changed from unity if the cross
+c  section factors are not the ones given in Neutrino Astrophysics,
+c  Table 3.2 and Table 3.4 .
+c December 27, 1993: cross section factors (includes improved
+c  calculation of p-p reaction, with better matrix nuclear element and
+c  vacuum polarization, by Kamionkowski and Bahcall (ApJ, Jan.10, 1994)
+c  and vacuum polarization effects on the 3He-3He, 3He-4He, 7Be-p, and
+c  14N-p reactions by Kamionkowski and Bahcall (1994,Phys. Rev. C,49).
+c  Use these to  get Bahcall-Pinsonneault 1995, Rev. Mod. Phys. Oct.
+c  This is the latest version as of 7/1995.
+c
+     9  SStandard/0.9558,0.9690,0.9712,1.0,1.0,0.992,1.0,1.0,1.0,1.0,
+     $  1.0,1.0,1.0,1.0,1.0,0.92088,0.1625/
+     $  weakscreening/.03d0/,pdp/0.d0/,pdt/0.d0/
+c History: May 6, 1992
+c Cross-Section factors from Bahcall & Pinsonneault (1992,Rev.Mod.Phys.,64,885)
+c     9  SStandard/0.9828,0.9709,0.9870,1.,1.,1.,1.,1.,1.,1.,1.,
+c     $  1.,1.,1.,1.,0.9218,0.1625/,
+c Cross-Section factors from Neutrino Astrophysics: For Checking only.
+c     9  SStandard/1.,1.,1.,1.,1.,1.,1.,1.,1.,1.,1.,1.,1.,1.,1.,1.,1./
+c--------------------------------------------------changed by R.Sienkiewicz
+c
+c ZPRD is used in screening calculations. It is the product of the
+c  charges of the interacting ions. ZPRD was checked. Z86 is used
+c  in calculating intermediate screening and is defined by Graboske et
+c  al, Ap. J. 181, page 465 (1973), in Table 4.  Z86 was checked and
+c  some numerical values were made slightly more accurate.  Z53, Z43,
+c  and Z23 are also defined in Table 4 (see above).  Since they are
+c  only used in strong screening, the values of Z53, Z43, and Z23
+c  were not checked.
+c
+      DATA ZPRD/1.,4.,4.,6.,6.,7.,8.,12.,16.,12.,14.,12.,36./,Z53/1.175,
+     1   3.73,3.73,4.804,4.804,5.385,5.941,9.014,11.24,9.014,10.15,
+     2   9.104,23.28/,Z43/0.52,1.31,1.31,1.488,1.488,1.61,1.721,2.577,
+     3   3.025,2.577,2.81,2.577,5.668/,Z23/-0.413,-0.655,-0.655,-0.643,
+     4   -0.643,-0.659,-0.673,-0.889,-0.946,-0.889,-0.92,-0.889,-1.36/,
+     5   Z86/1.630,5.917,5.917,8.302,8.302,9.520,10.716,16.192,20.978,
+     6   16.192,18.606,16.192,45.6635/,
+     7   C21/5.240358E-8/
+c
+c Define next the fractional abundances by mass of the important
+c  isotopes.
+c
+c X, Y, Z, XHe3,..., XBE9 are the mass fractions of the isotopes.
+c  For the Sun, can ignore the abundance of neutron, H2, H3, Ne20,
+c   and Mg24, which are, respectively, XFRAC(I) for I = 1,3,4,12,13.
+c
+      XFRAC(1) = 0.0
+      XFRAC(2) = X
+      XFRAC(3) = 0.0
+      XFRAC(4) = 0.0
+      XFRAC(5) = XHE3
+      XFRAC(6) = Y
+      XFRAC(7) = XC12
+      XFRAC(8) = XC13
+      XFRAC(9) = XN14
+      XFRAC(10) = XO16
+      XFRAC(11) = 0.0
+      XFRAC(12) = 0.0
+      XFRAC(13) = 0.0
+c
+c
+c *******************************************************************
+c Begin calculation of screening correction.
+c *******************************************************************
+c
+c  The basic references are Salpeter, Australian Journal of Physics,
+c  Vol. 7, 373 (1954). The formula for weak screening that is being
+c  programmed is Equation (25) of this paper. The other important
+c  references are: DeWitt, Graboske, and Cooper, Ap. J. 181, 439 (1973)
+c  and Graboske et al., Ap. J. 181, 457 (1973). The values of EMU and
+c  ZET are essential for computing weak screening; the value of AMU is
+c  used in an non-essential way in this computation. XTR is used in
+c  computing intermediate screening.
+c
+c
+c ANU is one over the mean molecular weight of the ions, mu sub I .
+c EMU is one over the electron mean molecular weight, mu sub e.
+c  EMU is used here as the name for the second part of the zeta function
+c  in the Salpeter expression for weak screening.
+c XTR is used later in the intermediate screening calculation.  The average
+c  of the quantity Z**(3b -1) is equal to XTR/AMU.
+c ZET is the first part of the Salpeter screening zeta variable.
+c
+c mu = sum over I of [X(I)/A(I)].
+c mu sub e = sum over I [ Z(I)*X(I)/A(I)].
+c
+c
+      AMU = 0.
+      EMU = 0.
+      XTR = 0.
+      ZET = 0.
+      DO 10 I = 1,NELEM
+         TRM = XFRAC(I)/ANUC(I)
+         AMU = AMU+TRM
+         EMU = EMU+TRM*ZNUC(I)
+         XTR = XTR+TRM*ZNUC(I)**1.58
+         ZET = ZET+TRM*ZNUC(I)**2
+   10 CONTINUE
+c
+c
+c DL and DT are the the log10 of the density and temperature.
+c  The unit of temperature is 10^9 K and the unit of density is
+c  gm per cm^3 .
+c PDT and PDP are the derivatives of the density with respect to
+c  temperature and density.
+c
+c DD = log rho to the base 10.
+c c6 = ln10.  C6 is conversion between log10 and ln.
+c Convert density to unlogged form.
+c RWE = rho/(mu sub e), i. e., the number of electrons divided by
+c  Avogadro's number.
+c
+      RWE = ( DEXP(C6*DL) )*EMU
+c
+c RWE is used later in computing the screening correction.
+c
+      DD = DL
+c
+c Set rates equal to zero for the Log_10(T) < 6.0.
+c
+      IF(TL.LE.6.0) THEN
+         EN = -20.
+         PEP = 0.
+         PET = 0.
+         DO 20 I = 1,NRXNS
+            EG(I) = 0.
+            RATE(I) = 0.
+            DG(I) = 0.
+   20    CONTINUE
+         GO TO 200
+      ENDIF
+c
+c T9P13 is the temperature in units of 10^9 degrees K to the Plus 1/3
+c  power.  Minus is denoted by M.  Here T9 is the temperature in units
+c  of 10^9 K, converted from the log_10 (T) and Rho is the density in
+c  cgs units.
+c
+      RHO=DEXP(C6*DD)
+      T9 = DEXP(C6*(TL - 9.0D0))
+      T9P13 = T9**0.33333333333333D0
+      T9P23 = T9P13**2
+      T9M13=1./T9P13
+      T9M23=T9M13**2
+      T9M1=1./T9
+      T9M2=T9M1**2
+      T9M12=1./DSQRT(T9)
+      T9M32=T9M1*T9M12
+c
+c ***********************************
+c f prime/f
+c ***********************************
+c
+c The next piece of code computes first the Fermi energy divided by kT, where
+c  PFMC2 is the Fermi momentum divided by mass of electron times c, all
+c  squared and EFMKT is the Fermi energy divided by kT.  The quantity
+c  FPRF is the ratio of f prime to f in Salpeter's screening correction.
+c  The value of FPRF is determined in the intermediate case by an
+c  interpolation formula depending upon the degree of degeneracy, as
+c  measured by DEGD = Log10(E_F/kT). The numerical values for the fit
+c  were taken from Salpeter's original paper, Figure 1. The only changes
+c  in this part of the subroutine were the correction of the error in
+c  the definition of RWE (see above) and refinements of the coefficients
+c  in the expressions for PFMC2 and EFMKT.
+c
+      PFMC2=1.017677E-4*RWE**0.6666667
+      EFMKT=5.92986*T9M1*(DSQRT(1.+PFMC2)-1.)
+      IF(EFMKT.LE.1.E-2) THEN
+         FPRF=1.0
+      ELSE
+         DEGD=DLOG10(EFMKT)
+         IF(DEGD.GE.1.5) THEN
+            FPRF=0.0
+         ELSE
+            FPRF=0.75793-0.54621*DEGD-0.30964*DEGD**2+0.12535*DEGD**3+
+     *      0.1203*DEGD**4-0.012857*DEGD**5-0.014768*DEGD**6
+         ENDIF
+      ENDIF
+c
+c End of calculation of Fermi energy divided by kT and the interpolation
+c  formula for (f prime/f), which appears in Salpeter's screening
+c  formula.
+c
+c Now we get to the computation of weak screening (see also page 61 of
+c  Neutrino Astrophysics, which gives only a simplified formula) and
+c  also the more complicated intermediate and strong screening cases
+c  (see references to Ap. J. 181 above for intermediate
+c  and strong screening), especially page 465.
+c
+c XXL is used in all the screening formulae.  This quantity is the
+c  is the function called Lambda sub zero by Graboske et al. The
+c  quantity XXL**0.86 = XXL8 is used in calculating intermediate
+c  screening.
+c Zcurl is the quantity defined by equation (4) of DeWitt et al; it
+c  is their Z with a curly symbol on its top. Zcurl is used in weak
+c  and in intermediate screening and was first defined by Salpeter.
+c  Zcurl is the same as Salpeter's zeta except for the factor of 1/AMU.
+c
+c (Z sub 1 times Z sub 2)*XXL*Zcurl gives the weak screening factor,
+c  the same as Salpeter or as Equation (19) of Graboske et al.
+c
+c Z bar is the same as Z bar of De Witt et al and is the average charge
+c  of the ions.  It is equal to EMU/AMU.  The quantity (Z bar)**0.28 =
+c  Z28 occurs in the computation of intermediate screening.
+c
+c XXL6 is used for computing strong strong screening.
+c
+c The notation used here is explained in large part by
+c  equation (4) of Dewitt et al., Ap. J. 181, page 439.
+c The final expression for weak screening is exactly equal to Salpeter's
+c  formula, which includes a degeneracy correction. The more general
+c  expressions are given in Table 4 and equation (19) of Graboske et al.
+c
+      XXL=5.9426E-6*T9M32*DSQRT(RHO*AMU)
+      XXL6=XXL**0.666667
+      XXL8=XXL**0.86
+      ZCURL=DSQRT((ZET+FPRF*EMU)/AMU)
+      ZBAR=EMU/AMU
+      Z58=ZCURL**0.58
+      Z28=ZBAR**0.28
+      Z33=ZBAR**0.333333
+      TM1=XXL*ZCURL
+c
+c Compute screening for each of the reactions.
+c
+      DO 30 I=1,NRXNS
+         UWK=TM1*ZPRD(I)
+         IF(UWK.LE.weakscreening) THEN
+c
+c Weakscreening is a numerical parameter.
+c  To obtain the Graboske et al. and Salpeter standard results,
+c  use: weakscreening = 0.03.  For the standard solar model, this is the
+c  value that should be adopted. To investigate the effect of always using
+c  weak screening, use a large value for weakscreening, e. g., 30.  As
+c  long as weakscreening is assumed to be bigger than one, the program
+c  will always calculate for the Sun with the weak screening
+c  approximation.
+c
+c Utot is the final screening correction which appears in the
+c  rate expression as: exp(Utot) .
+c DSCR is the logarithmic derivative with respect to density of the
+c  screening correction, d log (e^(U_tot)) /d log rho .
+c DSCT is the logarithmic derivative of the screening with respect to T,
+c d log (e^(U_tot)) /d log T .  The limiting formulae given in the first
+c option are obvious since in the weak limit Salpeter's formula shows
+c that u is proportional to the square root of rho times T^(-3/2).
+c
+            UTOT(I)=UWK
+            DSCR(I)=0.5*UWK
+            DSCT(I)=-1.5*UWK
+         ELSE
+            UINT=0.38*XXL8*XTR*Z86(I)/(AMU*Z58*Z28)
+            IF(UWK.LE.2.) THEN
+               UTOT(I)=UINT
+               DSCR(I)=0.43*UINT
+               DSCT(I)=-1.29*UINT
+            ELSE
+               USTR=0.624*Z33*XXL6*(Z53(I)+0.316*Z33*Z43(I)+0.737*
+     *         Z23(I)/(ZBAR*XXL6))
+               IF(USTR.LT.UINT.OR.UWK.GE.5.) THEN
+                  UTOT(I)=USTR
+                  DSCR(I)=0.208*Z33*(Z53(I)+0.316*Z33*Z43(I))*XXL6
+                  DSCT(I)=-3.*DSCR(I)
+               ELSE
+                  UTOT(I)=UINT
+                  DSCR(I)=0.43*UINT
+                  DSCT(I)=-1.29*UINT
+               ENDIF
+            ENDIF
+         ENDIF
+   30 CONTINUE
+c
+c ****************************************************************
+c End of screening calculation. Weak and Intermediate screening forms
+c  are given correctly.  Strong screening was not checked because it is
+c  not relevant for the Sun.
+c ****************************************************************
+c
+      NZ=1
+      IF(X.EQ.0.0) THEN
+         F1=0.
+         F2=0.
+         F3=0.
+         F4=0.
+         GOTO 50
+      ENDIF
+      NZ=8
+c
+c **************************************************************
+c  Calculate reaction rates for the three principal rections of
+c   the pp chain: pp, He3+He3, He3 +He4, and the four proton
+c   burning reactions on C12: C13, N14, and O16.
+c **************************************************************
+c
+c R1 is (T sub 9)^(-3/2) times (S sub eff)/(S sub 0). The correct
+c  expression for (S sub eff)/(S sub 0) is given in equation 3.14 of
+c  Neutrino Astrophysics.  The numerical form that is used is equation
+c  52 of Fowler, Cauhlan, and Zimmerman, Vol. 5, 1967.
+c
+c Rate(I) is the rate of the different reactions per second per gram,
+c  except that the mass fractions are omitted at this point and put in
+c  later.
+c DRATT is logarithmic derivative of rate with respect to temperature,
+c  d log Rate divided by d log T, log to base 10.
+c DRATRO is the logarithmic derivative of the rate with respect to
+c  density, d log Rate/d log rho, log to base 10.
+c
+      DO 40 I=1,7
+         R1=T9M23+Q1(I)*T9M13+Q2(I)+Q3(I)*T9P13+Q4(I)*T9P23+Q5(I)*T9
+         RATE(I)=RHO*R1*DEXP(Q6(I)*T9M13+Q7(I)+(Q8(I)*T9)**2+UTOT(I))
+         Rate(I) = Rate(I)*SStandard(I)
+         IF(RATE(I).LT.1.d-100) THEN
+            RATE(I)=0.
+            DRATT(I)=0.
+         ELSE
+            DRATRO(I)=1.+DSCR(I)
+            DRATT(I)=DSCT(I)-(Q6(I)*T9M13+(2.*T9M23+Q1(I)*T9M13-Q3(I)*
+     *      T9P13-2.*Q4(I)*T9P23-3.*Q5(I)*T9)/R1)/3.+2.*(Q8(I)*T9)**2
+         ENDIF
+   40 CONTINUE
+c
+c ***************************************************************
+c End of calculation of reaction rates for first 7 reactions.
+c ***************************************************************
+       h1h1=rate(1)/dexp(utot(1))/rho*2.d0*anuc(2)**2*1.66054d-24
+       he3he3=rate(2)/dexp(utot(2))/rho*2.d0*anuc(5)**2*1.66054d-24
+       he3he4=rate(3)/dexp(utot(3))/rho*anuc(5)*anuc(6)*1.66054d-24
+       n14h1=rate(6)/dexp(utot(6))/rho*anuc(2)*anuc(9)*1.66054d-24
+       o16h1=rate(7)/dexp(utot(7))/rho*anuc(2)*anuc(10)*1.66054d-24
+c
+c ***********************************************
+c Add a description of Be7 burning
+c ***********************************************
+c
+c Calculate the burning of Be7 by protons (which produces the most
+c  experimentally accessible solar neutrinos) and the burning of Be7
+c  by electron capture (the dominant process).
+c
+c The electron capture rate in sec^(-1) is given by equation (3.18) of
+c  Neutrino Astrophysics.  Can omit the factor of rho (in cgs units)
+c  which also appears in the Be7 + proton rate. The Be7 + proton capture
+c  rate is given by Table 3.2 and Equation (3.12).  Note that 1 over mu
+c  sub e is equal to EMU.
+c
+c Will use the notation Be7 + proton = Be7proton and
+c  Be7 + e = Be7electron.
+c
+c F1 is the fraction of the Be7 that is burned by electron capture.
+c F2 is the fraction of the Be7 that is burned by proton capture.
+c F3 is the fraction of the N14 that is burned by p, alpha reaction.
+c F4 is the fraction of the N15 that is burned by p, gamma reaction.
+c See Table 21 of Bahcall and Ulrich (1988), Rev. Mod. Phys. 60.
+c
+         Be7electron = (1.752E-10)*T9M12*(1.0 + 0.004*(1000.*T9 - 16.))
+         Be7electron = Be7electron*EMU*SStandard(15)
+
+         be7e = Be7electron/emu
+
+         Temp3 = (-10.26202*T9M13)
+         Be7proton = (3.126571E+5)*X*SStandard(16)*Dexp(temp3)
+c
+c Include for Be7proton the T9M23 factor and all corrections proportional to
+c  Q1,...,Q5 from Equation 3.14 of Neutrino Astrophysics. These
+c  corrections are defined earlier in this subroutine.
+c
+         QRBe7 = T9M23 + Q1(8)*T9M13 + Q2(8)+ Q3(8)*T9P13
+     $          + Q4(8)*T9P23 + Q5(8)*T9
+         Be7proton = Be7proton*QRBe7
+
+         if(x.lt.1.d-100)stop 'x.lt.1.d-100'
+         be7h1 = Be7proton*anuc(2)/x
+c
+c Calculate the screening correction for Be7 + p reaction.  Use weak and
+c  intermediate screening formulae.
+c
+         ZPRDBe7p = 4.0
+         Z86Be7p = 5.7790
+         UWK = TM1*ZPRDBe7p
+         IF(UWK.LE.weakscreening) THEN
+            UTOTBe7p = UWK
+         ELSE
+            UINT = 0.38*XXL8*XTR*Z86Be7p/(AMU*Z58*Z28)
+            UTOTBe7p = UINT
+          End if
+c
+c End of calculation of screening correction for Be7 + p reaction.
+c
+         Be7proton = Be7proton*DEXP(UTOTBe7p)
+c
+c Multiply rates by factor of rho/[(atomic mass unit)*A(Be7)] to get
+c  in units of gm^{-1}.  Call factor cAMUBe7.
+c
+         cAMUBe7 = rho*8.582295E+22
+         Be7proton = cAMUBe7*Be7proton
+         Be7electron = cAMUBe7*Be7electron
+c
+c End of multiplication inserted November 6, 1990.
+c
+         F1 = Be7electron/(Be7electron + Be7proton)
+         F2 = Be7proton/(Be7electron + Be7proton)
+c
+c *********************************************************************
+c End of calculation of crucial Be7 electron capture and proton capture
+c  rates and their ratio.
+c *********************************************************************
+c
+c ***************************
+c N15 + p branching.
+c ***************************
+c
+c The following statements compute the branching of N15(p,alpha)C12
+c  and N15(p,gamma)O16. These statements replace outdated statements
+c  in the Yale code. The CNO cross-section factors are from Table 3.4
+c  of Neutrino Astrophysics.  The ratio of the reactions depends only
+c  upon the effective zero energy S-factor, which is S0(zero energy)
+c  times the combination of temperature and S-factor derivatives/S0
+c  that was used previously as R1 in the rate calculations. The
+c  numerical coefficients that appear in the rate were represented
+c  by the Q1(J),...Q5(J) for the other reactions.
+c  The Qvalues for the N15 reactions have been computed separately.
+c
+      O16gamma = T9M23 + 0.0272969*T9M13 + 0.205379 + 0.0392714*T9P13
+     $          + 5.999033*T9P23 + 2.91700256*T9
+c
+c Multiply by the value of S0 in kev-b.
+c
+      O16gamma = O16gamma*64.
+
+      n15h1o = O16gamma
+
+c
+c Multiply by the value of S0 in kev-b.
+c
+      C12alpha = T9M23 + 0.0272969*T9M13 + 1.97164 + 0.3770055*T9P13
+     $          + 13.65933*T9P23 + 6.641790*T9
+      C12alpha = C12alpha*78000.
+
+      n15h1c = C12alpha
+
+      F3 = C12alpha/(C12alpha + O16gamma)
+      F4 = 1. - F3
+c
+c End of new routine for the branching of N15 + p .
+c
+   50 DO 60 I=NZ,NRXNS
+         RATE(I)=0.
+         DRATRO(I)=0.
+         DRATT(I)=0.
+   60 CONTINUE
+c
+c  I have eliminated at this point the calculation of the alpha-capture rates
+c   and the C12 + C12 rate.  These rates are certainly negligible in
+c   the Sun and in general probably below 25 million degrees. Thus
+c   reactions 8-13 are omitted from this version of the subroutine.
+c
+c *******************
+c EG(I)
+c *******************
+c
+c Multiply the rates per gram, Rate(I), by the abundances of the
+c  reacting species by mass, to get the total rates per gram, EG.
+c Only reactions 1-7 are important in the Sun.  The first three, I = 1,3
+c  are the most important since they determine the rate of the pp cycle.
+c  The next three, I = 4-6, are significant for the relatively rare CNO
+c  cycle. The rate for reaction 7 is a correction to the CNO cycle.
+c  The reactions, I = 8-13, are not important in the Sun and are
+c  omitted here.
+c
+  100 EG(1)=RATE(1)*X*X
+      EG(2)=RATE(2)*XHE3*XHE3
+      EG(3)=RATE(3)*XHE3*Y
+      EG(4)=RATE(4)*X*XC12
+      EG(5)=RATE(5)*X*XC13
+      EG(6)=RATE(6)*X*XN14
+      EG(7)=RATE(7)*X*XO16
+c
+c Set rates of reactions 8-13 equal to zero.
+c
+       Do 123 Izero = 8,13
+  123   EG(Izero) = 0.0
+c
+c Calculate energy generation by multiplying rates per gram per sec by
+c  the energy release.  The energies are taken from Table 21 of Bahcall and
+c  Ulrich (1988), Rev. Mod. Phys. 60, 297. This table is based upon a careful
+c  calculation of the average amount of energy loss by neutrinos for
+c  each reaction. The numbers for the C12 + p reaction sequence and the
+c  C13 + p reaction are broken down separately for this
+c  subroutine.
+c
+c The final numbers are in erg per gm per second.
+c
+c Define the constant to convert MeV's to ergs. The numbers that appear
+c  are in MeV so they can be easily identified.
+c
+      convert = 1.602177E-6
+c
+c The multiplying constants below are in MeV.
+c
+      DG(1)=EG(1)*6.664*convert
+      DG(2)=EG(2)*12.860*convert
+      DG(3)=EG(3)*(1.586+F1*17.394+F2*11.499)*convert
+      DG(4)=EG(4)*3.457372*convert
+      DG(5)=EG(5)*7.550628*convert
+      DG(6)=EG(6)*(9.054+F3*4.966+F4*12.128)*convert
+      DG(7)=EG(7)*3.553*convert
+c
+c *******************************************************************
+c End of calculation of energy release.
+c *******************************************************************
+c
+c Set to zero all of the alpha-particle and C12-burning reactions.
+c
+      DRATRO(8) = 0.0
+      DRATT(8) = 0.0
+      DG(8) = 0.0
+      DRATRO(9) = 0.0
+      DRATT(9) = 0.0
+      DG(9) = 0.0
+      DRATRO(10) = 0.0
+      DRATT(10) = 0.0
+      DG(10) = 0.0
+      DRATRO(11) = 0.0
+      DRATT(11) = 0.0
+      DG(11) = 0.0
+      DRATRO(12) = 0.0
+      DRATT(12) = 0.0
+      DG(12) = 0.0
+      DRATRO(13) = 0.0
+      DRATT(13) = 0.0
+      DG(13) = 0.0
+c
+c End of xeroing out of reactions 8-13.
+c
+      SUM1=0.0
+      SUM2=0.0
+      SUM3=0.0
+      DO 110 I=1,NRXNS
+C
+c *******************************************************************
+c Sum of the total energy generation in ergs per grm per second with
+c derivatives with respect to density and to temperature.
+c *******************************************************************
+c
+c Sum1 = sum of all energy generation rates. Note that the burning of
+c  Be7 is included in DG(3) above.
+c Sum2 = Sum over I of DG(I)* [d log Rate(I) / d log rho ].
+c Sum3 = Sum over I of DG(I)* [d log Rate(I) / d log T ].
+c
+         SUM1=SUM1+DG(I)
+         SUM2=SUM2+DG(I)*DRATRO(I)
+         SUM3=SUM3+DG(I)*DRATT(I)
+  110 CONTINUE
+      IF(SUM1.LE.1.E-12) THEN
+         EN=-20.
+         PEP=0.
+         PET=0.
+         DO 120 I=1,NRXNS
+            EG(I)=0.
+  120    CONTINUE
+      ELSE
+c
+         EN=DLOG10(SUM1)
+         PEPD=SUM2/SUM1
+         PEP=PDP*PEPD
+         PET=SUM3/SUM1+PDT*PEPD
+      ENDIF
+c
+c PDP = d Log rho/ d log P; PDT = d log rho/ d log T.
+c
+c
+  200 continue
+c
+c
+c The summation of the energies is given in Table 21 of Neutrino
+c  Astrophysics.
+c
+c
+c EPP1 includes the energy generated by the pp reaction, by the H2 + p
+c  reaction, and by the He3 + He3 reaction.  See Table 21 of Neutrino
+c  Astrophysics.
+c
+      EPP1 = DG(1)+DG(2)
+c
+c EPP2 includes the energy generated by the He3 + He4 reaction and by
+c  the burning of Be7 through electron capture.
+c
+      EPP2 = EG(3)*(1.586 + F1*17.394)*convert
+c
+c EPP3 includes the energy generated by the He3 + He4 reaction and by
+c  the burning of Be7 through proton capture.
+c
+      EPP3 = EG(3)*(1.586 + F2*11.499)*convert
+c
+c ECN is the energy generated through the CNO cycle.
+c
+      ECN=DG(4)+DG(5)+DG(6)+DG(7)
+c
+c E3AL is the energy generated through the alpha-burning reactions and
+c  is negligible for the Sun.
+c
+      E3AL=DG(8)+DG(9)+DG(10)+DG(11)+DG(12)
+c
+c PEP and PET are the derivatives of the total energy generation rate
+c  with respect to pressure and temperature.
+c
+c ****************************************************************
+c Calculation of Neutrino Fluxes
+c ****************************************************************
+c
+c This part of the subroutine calculates the neutrinos fluxes in
+c  number per gram per square centimeter per second at the Earth's surface
+c  (assuming nothing happens to the neutrinos after they are created).
+c See Tables 3.1 and 3.3 of Neutrinos Astrophysics or equations 6.1-6.8
+c  for the reactions. The order of the reactions is the same as in
+c  equations 6.1-6.8 .
+c
+c Define 4*pi*(AU)**2 .
+c
+      fourpiAU2 = 2.812295E+27
+c
+c Flux of pp neutrinos.
+c
+      Flux(1) = Eg(1)/fourpiAU2
+c
+c Flux of pep neutrinos. Use Equation 3.17 of Neutrino Astrophysics.
+c
+      Flux(2) = (3.4848E-6)*RWE*T9M12*(1.0 + 20.*T9)*Eg(1)
+      Flux(2) = Flux(2)*SStandard(14)/fourpiAU2
+c
+c Flux of hep neutrinos.  Use Equation 3.12 directly.
+c
+      Q6hep = -6.1399
+c
+c Q6 is the negative of the coefficient of T9M13 in tau, equation 3.10.
+c
+      Flux(3) = (1.71724E+11)*Rho*T9M23*DEXP(Q6hep*T9M13)
+c
+c The derivatives of the cross section factor are not known and are
+c  taken to be zero.  The only term from equation 3.14 that survives
+c  is 5/(12*tau).
+c
+      Flux(3) = (1.0 + 0.067862*T9P13)*SStandard(17)*Flux(3)
+c
+c
+c Calculate weak or intermediate screening for hep neutrinos.
+c
+         ZPRDHe3p = 2.0
+         Z86He3p = 3.08687
+         UWK = TM1*ZPRDHe3p
+         IF(UWK.LE.weakscreening) THEN
+            UTOTHe3p = UWK
+         ELSE
+            UINT = 0.38*XXL8*XTR*Z86He3p/(AMU*Z58*Z28)
+            UTOTHe3p = UINT
+          End if
+c
+c End of calculation of screening correction for He3 + p reaction.
+c
+      Flux(3) = Flux(3)*Dexp(UTOTHe3p)
+      Flux(3) = Flux(3)*X*XHe3/fourpiAU2
+c
+c Compute Be7massfraction. This is not required for the neutrino
+c  fluxes since Be7 is always in equilibrium with the slower production
+c  rate of He3 + He4.  However, it is of interest in some applications
+c  to know the Be7 mass fraction, so I compute it here and it can be
+c  extracted with a common statement if desired.
+c
+      Be7massfraction = EG(3)/(Be7proton + Be7electron)
+c
+c End of November 6, 1990  addition.
+c
+c
+c Flux of Be7 neutrinos.
+c
+      Flux(4) = Eg(3)*F1/fourpiAU2
+c
+c Flux of B8 neutrinos.
+c
+      Flux(5) = Eg(3)*F2/fourpiAU2
+c
+c Flux of N13 neutrinos.
+c
+      Flux(6) = Eg(4)/fourpiAU2
+c
+c Flux of O15 neutrinos.
+c
+      Flux(7) = Eg(6)/fourpiAU2
+c
+c Flux of F17 neutrinos.
+c
+      Flux(8) = Eg(7)/fourpiAU2
+c
+c Flux of fictional He3 + He3 neutrinos.
+c
+      Flux(9) = Eg(2)/fourpiAU2
+c
+c Flux of fictional He3 + He4 neutrinos.
+c
+      Flux(10) = Eg(3)/fourpiAU2
+c
+c
+c End of Neutrino Flux routine.
+c
+      RETURN
+      END
+c-----------------------------------------------------------
+c        This file contains the following seven subroutines:
+c              - "nburn"  -
+c              - "neu"    -
+c              - "neutrn" -
+c              - "screen" -
+c              - "tabrat" -
+c              - "crates" -
+c              - "Energy" -
+c                                                end of the file "nuclear.s37"
+ceeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+ceeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+ceeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee

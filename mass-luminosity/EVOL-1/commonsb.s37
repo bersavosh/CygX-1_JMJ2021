@@ -1,0 +1,416 @@
+cbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+cbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+cbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+c
+c  Begin of the file "commonsb.s37"                   date: September 30, 1991
+c
+c
+c    This file contains subroutines common for the "s37" and "h37" codes.
+c    subroutine:        subject:
+c    -----------        --------
+c
+c   - "grid1"  -  redistributes mass points
+c                     SUBROUTINE CALLED:
+c                     - "remhyd" -
+c   - "readh"  -  reads results of model integrations from a disk file
+c                 prepared by the program "s37" or "h37"
+c   - "writeh" -  stores results of the program "s37" or "h37"
+c                 (for future use by the program "h37")
+c   auxiliary subroutine:
+c   - "remhyd" -
+c.............................................................................
+c
+      subroutine grid1(n1,n2)
+      implicit double precision (a-h,o-z)
+      include 'data.s37'
+      common/hen/ hx(m2,nt), dh(m2,nt), nh
+c
+c subject:
+c     redistribute mass points between the mass points "n1" and "n2".
+c     If new points are inserted between the old "n", "n+1" points
+c     (n1-1 < n < n2), they are uniformly spaced over the interval <n, n+1>.
+c input:
+c     n1,n2 = the limiting mass points
+c     ss(i), i=1,2,3,4,5 = the maximum step size in five variables
+c     ns   = a number of variables for which zone thickness is measured
+c predefined in 'data.s37'
+c     nss  = number of limits for space step (actually nss=8)
+c     m2   = the number of variables in every mass zone
+c subroutine called:
+c     "remhyd"
+c..............................................................................
+
+      dimension a(m2),g(m2),ss(nss)
+
+      if (n1.eq.n2.and.n2.eq.2) return
+      if (n1.ge.n2) then
+         write (*,*) 'n1, n2 :', n1, n2
+         stop ': file "commonsb.s37" - subroutine "grid1": n1 .ge. n2'
+      endif
+c                            --- set upper limits for zone thickness in all
+c                                variables, using values defined in 'data.s37'
+c                                as ss1, ss2, ss3, ss4, ss5 multiplied by facss
+      ss(1) = ss1*facss
+      ss(2) = ss2*facss
+      ss(3) = ss3*facss
+      ss(4) = ss4*facss
+      ss(5) = ss5*facss
+c                                      --- set number of functions "measured"
+c
+c  For version with Mconv as a Main Point it is enough to use ns=5,
+c  without criteria ss6-ss8;
+      ns=5
+c
+c  For version without M.P. the criteria ss6-ss8 are needed for masses
+c  of about 1.5 Msun, so ns=nss=8 in this case.
+c      ns=nss
+
+      k=nh+1
+    1 continue
+      k=k-1
+      k1=nt-nh+k
+
+      do 2 i=1,m2
+      hx(i,k1)=hx(i,k)
+      dh(i,k1)=dh(i,k)
+    2 continue
+
+      if(k.gt.n1)go to 1
+c                                      --- all mass points above n1 have been
+c                                          moved up by "nt-nh"
+
+      fac=0.
+      k=n1
+c                                      --- interpolate new mass points:
+    3 continue
+      if(k1.eq.nt-nh+n2)go to 8
+
+      do 4 i=1,m2
+      g(i)=hx(i,k1)
+      a(i)=dh(i,k1)
+    4 continue
+
+      k1=k1+1
+      fac1=0.
+c                                      --- measure the "thickness"
+      do 5 i=1,ns
+         fach=abs(hx(i,k1)-g(i))/ss(i)
+         if(fac1.lt.fach)fac1=fach
+    5 continue
+
+      fac2=fac
+      fac=fac1+fac2
+
+    6 continue
+      if(fac.lt.1.)go to 3
+
+      k=k+1
+
+      do 7 i=1,m2
+      hx(i,k)=((fac-1.)*g(i)+(1.-fac2)*hx(i,k1))/fac1
+      dh(i,k)=((fac-1.)*a(i)+(1.-fac2)*dh(i,k1))/fac1
+    7 continue
+c                                      --- a mass point number "k" has been
+c                                          interpolated
+      fac=fac-1.
+      fac2=fac2-1.
+      go to 6
+
+    8 continue
+      if(fac.lt.0.6)go to 9
+      k=k+1
+c                                      --- interpolation of mass points between
+c                                          "n1" and "n2" has been completed
+    9 continue
+      kk=k-n2
+      if(kk.le.n1-n2)kk=n1-n2+1
+c                                      --- "mp()","n2","nh" are shifted by "kk"
+      do 91 i=1,20
+      if(mp(i).ge.n2)mp(i)=mp(i)+kk
+   91 continue
+      n2=n2+kk
+      nh=nh+kk
+c                                      --- a new "nh" has been calculated
+
+c                                      --- move points between "n2" and "nh"
+      do 11 k=n2,nh
+         k1=nt-nh+k
+         do 10 i=1,m2
+            hx(i,k)=hx(i,k1)
+            dh(i,k)=dh(i,k1)
+   10    continue
+   11 continue
+c                                      --- all the points have been moved.
+c                                      --- Now, remove small amount of hydrogen
+c                                      --- possibly introduced into helium core
+c                                      --- as a result of the above procedure..
+      call remhyd
+c                                      --- end of "grid1"
+      end
+c
+c..............................................................................
+c
+      subroutine readh(iout2)
+      implicit double precision (a-h,o-z)
+      include 'data.s37'
+      common/hen/ hx(m2,nt), dh(m2,nt), nh
+c
+c subject:
+c     read results of model integrations from a disk file
+c     prepared by the program "s37" or "h37",
+c     write a model head-line on another disk file (unit=iout2)
+c     and on the screen
+c output:
+c common /hen/: hx(i,2:nh-1)
+c     hx(1,k) = log10 (density)                            [g/cm**3]
+c     hx(2,k) = log10 (temperature)                        [K]
+c     hx(3,k) = log10 (radius)                             [cm]
+c     hx(4,k) = luminosity / luminosity unit
+c     hx(5=mm,k) = mass / total stellar mass
+c     hx(6,k) = x = hydrogen content                         [by mass fraction]
+c     hx(7,k) =     helium-3 content (= 0 in this version)   [by mass fraction]
+c     hx(8,k) =     helium-4 content                         [by mass fraction]
+c     hx(11,k)=     nitrogen-14 content                      [by mass fraction]
+c     hx(12,k)=     oxygen-16 content                        [by mass fraction]
+c          k     =  a mass point number
+c common /hen/: the boundary parameters:
+c     hx(1,nh) = telg    = log10 ( surface temperature )   [K]
+c     hx(2,nh) = fllg    = log10 ( surface luminosity / solar luminosity )
+c     hx(5=mm,nh) = starm   = total stellar mass / solar mass
+c     hx(2,1)  = tclg    = log10 ( central temperature )   [K]
+c     hx(1,1)  = rhclg   = log10 ( central density )       [g/cm**3]
+c common /hen/ hx(i,2),... hx(i,nh-1)
+c     hx(i,nh-1) = all variables at the base of the
+c                      envelope integrated with subroutine "env"
+c     hx(i,2)    = all variables at the surface of the innermost sphere
+c                      as calculated by the subroutine "center"
+c common /hen/: 
+c     nh    = 2 + the number of mass points in the converged model
+c common /heninc/:
+c     time    = time                                       [s]
+c     dtime   = time step                                  [s]
+c     flunit  = luminosity unit                            [erg/s]
+c     fmtot   = total stellar mass                         [g]
+c     model   = sequential model number
+c     com     = an array to transfer real data among subroutines
+c     icom    = an array to transfer integer data among subroutines
+c predefined in 'data.s37'
+c     m2, year
+c............................................................................
+
+      dimension icon(20), con(20)
+      character*8 fname
+
+      do 20 i=1,20
+       com(i)=0.
+      icom(i)=0
+   20 continue
+
+      write(*,100)
+c      read(*,*) fname
+      read(*,*) model
+      write(fname,101) model
+      write (*,*) ' model =', model
+101   format('mod',i5.5)
+      iunit=1
+      open(iunit,file=fname,status='old',iostat=ioval)
+      if(ioval.ne.0)stop ': file "commonsb.s37" -
+     * subroutine "readh" -  unable to open file '
+
+      read(iunit,301)nicon,ncon
+      if (nicon.gt.20 .or. ncon.gt.20) stop
+     *  ': file "commonsb.s37" - subroutine "readh" - n(i)con > 20'
+      read(iunit,301)(icon(i),i=1,nicon)
+      read(iunit,302)(con(i),i=1,ncon-2)
+      read(iunit,312)(con(i),i=ncon-1,ncon)
+      com(11)=con(5)
+      com(13)=con(6)
+c      read(iunit,319)(mp(k),k=1,20)
+c  319 format(24x,10i5/24x,10i5)
+      read(iunit,319)zed,zp,(mp(k),k=1,20)
+  319 format(1x,2f10.7,3x,10i5/24x,10i5)
+c                                         --- convert the constants:
+      nh=icon(1)
+      model=icon(2)
+      if (nh.gt.nt) stop ': file "commonsb.s37" - subroutine "readh"
+     * -  too many mass points, (nh > nt)'
+c      nh1=nh-1
+
+      flunit=10.**con(1)
+      fmtot=10.**con(2)
+      time=0.
+      dtime=0.
+      if (con(3).ne.0.)  time=10.**con(3)*year
+      if (con(4).ne.0.) dtime=10.**con(4)*year
+
+c                                  --- end of constants
+c                                  --- now read the mass zones:
+      do 1 k=1,nh
+      read(iunit,303)kk1,(hx(i,k),i=1,5)
+      read(iunit,303)kk2,(hx(i,k),i=6,10)
+      read(iunit,303)kk3,(hx(i,k),i=11,m2)
+      if(kk1.ne.k.or.kk2.ne.k.or.kk3.ne.k)stop 'model read error'
+    1 continue
+
+      close(iunit)
+c                                  --- set the time differences equal to zero:
+      do 3 k=1,nt
+      do 2 i=1,m2
+      dh(i,k)=0.
+    2 continue
+    3 continue
+c                                  --- head-line
+      hx1=hx(mm+1,nh-1)
+c      hx2=hx(mm+2,nh-1)
+      hx3=hx(mm+3,nh-1)
+c NEWOVER
+      write(*,305)    hx(mm,nh),hx1,1.-hx1-hx3,alfa,alfaov,wykla
+      write(iout2,304)hx(mm,nh),hx1,1.-hx1-hx3,alfa,alfaov,wykla
+      write(iout2,307)
+  100 format(/,' Ready to read model prepared earlier by the program', 
+     *      /,' "s37"(file "mod00000") or "h37"(file "mod#####" ',
+     *      /,' Enter model number : ',/)
+  301 format(1x,15i5)
+  302 format(1x,0p5f14.10)
+  312 format(1x,1p5e15.6)
+  303 format(1x,i5,5f14.10)
+  304 format(' H37: M = ',f8.5,', X = ',f5.4,', Z = ',f5.4,
+     #       ', alfa = ',f4.2,', alfaov,wykla =',2f6.2)
+  305 format(' H37: M = ',f8.5,', X = ',f5.4,', Z = ',f5.4,
+     #       /,', alfa = ',f4.2,', alfaov,wykla =',2f6.2)
+  307 format(/,'  MOD   lg(t)   lgTsur  lgTeff  lg L  lgReff',
+     *     '  lgTc  lgRhoc    Xc     Mc/M   Mov/M    Vrot  N14     O16'
+     *         '   lg(dtime)  Mtot        dM/dt')
+c                                   --- end of "readh"
+      end
+c
+c..............................................................................
+c
+      subroutine writeh
+      implicit double precision (a-h,o-z)
+      include 'data.s37'
+      common/hen/ hx(m2,nt), dh(m2,nt), nh
+c
+c subject:
+c     store results of the program "s37" or "h37"
+c     (for future use by the program "h37")
+c common /hen/: hx(i,2:nh-1):
+c     contains data for the program "h37"
+c     hx(1,k) = log10 (density)                          [g/cm**3]
+c     hx(2,k) = log10 (temperature)                      [K]
+c     hx(3,k) = log10 (radius)                           [cm]
+c     hx(4,k) = luminosity / luminosity unit
+c     hx(5=mm,k) = mass / total stellar mass
+c     hx(6,k) = x = hydrogen content                         [by mass fraction]
+c     hx(7,k) =     helium-3 content (= 0 in this version)   [by mass fraction]
+c     hx(8,k) =     helium-4 content                         [by mass fraction]
+c     hx(11,k)=     nitrogen-14 content                      [by mass fraction]
+c     hx(12,k)=     oxygen-16 content                        [by mass fraction]
+c          k     = a mass point number
+c common /hen/: the boundary parameters:
+c     hx(1,nh) = telg    = log10 ( surface temperature ) [K]
+c     hx(2,nh) = fllg    = log10 ( surface luminosity / solar luminosity )
+c     hx(5=mm,nh) = starm   = total stellar mass / solar mass
+c     hx(2,1)  = tclg    = log10 ( central temperature ) [K]
+c     hx(1,1)  = rhclg   = log10 ( central density )     [g/cm**3]
+c common /hen/: hx(i,2), hx(i,nh-1)
+c     hx(i,nh-1) = all variables at the base of the envelope integrated
+c                  with subroutine "env"
+c     hx(i,2)    = all variables at the surface of the innermost sphere
+c                  as calculated by the subroutine "center"
+c common /hen/:
+c      nh    = 2 + the number of mass points in the converged model 
+c common /heninc/:
+c     time    = time                                     [s]
+c     dtime   = time step                                [s]
+c     flunit  = luminosity unit                          [erg/s]
+c     fmtot   = total stellar mass                       [g]
+c     model   = sequential model number
+c     com     = an array to transfer real data among subroutines
+c     icom    = an array to transfer integer data among subroutines
+c predefined in 'data.s37':
+c      m2    = number of variables in every mass point
+c 
+c output file:  'mod#####' created through unit 1 (open then close)
+c............................................................................
+
+      dimension icon(20), con(20)
+      character*8 name                !  for file 'mod#####'
+
+
+      iout=1
+      write(name,100) model
+100   format('mod',i5.5)
+      write(*,300) name, nh
+      open(iout,file=name,status='unknown')
+
+      icon(1)=nh
+      icon(2)=model
+      con(1)=log10(flunit)
+      con(2)=log10(fmtot)
+      con(3)=0.
+      con(4)=0.
+      if (time.ne.0.) con(3)=log10(time/year)
+      if (dtime.ne.0.)con(4)=log10(dtime/year)
+
+      con(5)=com(11)
+      con(6)=com(13)
+c      
+      nicon=2
+      ncon=6
+      write(iout,301)nicon,ncon
+      write(iout,301)(icon(i),i=1,nicon)
+      write(iout,302)(con(i),i=1,ncon-2)
+      write(iout,312)(con(i),i=ncon-1,ncon)
+c      write(iout,319)(mp(k),k=1,20)
+c  319 format(24x,10i5/24x,10i5)
+      write(iout,319)zed,zp,(mp(k),k=1,20)
+  319 format(1x,2f10.7,3x,10i5,/,24x,10i5)
+
+      do 10 k=1,nh
+         write(iout,303)k,(hx(i,k),i=1,5)
+         write(iout,303)k,(hx(i,k),i=6,10)
+         write(iout,303)k,(hx(i,k),i=11,m2)
+   10 continue
+      close(iout)
+      write(*,*) '  ...done'
+  300 format(' writing "',a11,'",   nh =',i3)
+  301 format(1x,15i5)
+  302 format(1x,0p5f14.10)
+  312 format(1x,1p5e15.6)
+  303 format(1x,i5,5f14.10)
+c                                         --- end of "writeh"
+      end
+
+c..............................................................................
+c
+      subroutine remhyd
+      implicit double precision (a-h,o-z)
+      include 'data.s37'
+      common/hen/ hx(m2,nt), dh(m2,nt), nh
+c subject:
+c remove hydrogen which may be artificially introduced into helium core
+c as a result of redistribution of mass points.
+
+      do 1 i=1,nh-1
+         if(hx(mm+1,i).gt.endhco)go to 1
+         hx(mm+1,i)=0.d0
+c         hx(mm+2,i)=1.d0 - hx(mm+3,i)
+         hx(mm+2,i)=0.
+         hx(mm+3,i)=1.-zed
+         dh(mm+1,i)=0.d0
+         dh(mm+2,i)=0.d0
+         dh(mm+3,i)=0.
+    1 continue
+
+      end
+c.............................................................................
+c        This file contains the following five subroutines:
+c              - "grid1"  -
+c              - "readh"  -
+c              - "writeh" -
+c              - "remhyd" -
+c                                               end of the file "commonsb.s37"
+ceeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+ceeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+ceeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee

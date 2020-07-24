@@ -1,0 +1,1540 @@
+cbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+cbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+cbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+c
+c DOUBLE PRECISION VERSION
+c
+c  Begin of the file "EOS2005.S37"                           date: 05.04.2006.
+c  (rename as EOSTATE.S37 if we don't change any 'include')
+c
+c   Obtained from EOSTATE.S37 for new EOS2005:
+c   subroutine TERMO for the envelope is added. It was extracted 
+c   from the block LLNL_ENV.S37 and modified. In this subroutine 
+c   the simple equation of state from old subroutine ENVELOPE.ST3 
+c
+c   (old: is used for T < 5000 K where no LLNL EOS data are available.)
+c   (No fitting between LLNL EOS and Simple EOS data at T=5000 K is assumed.)
+c
+c   05.04.2006 for EOS2005:
+c	adopted block to OPAL EOS2005 (obtained from EOS2001.S37).  
+c   Rename input file EOS20055 to EOSDATA5.
+c
+c   30.01.2002 for EOS2001:
+c   is used for T < 2000 K where no LLNL EOS data are available.
+c   No fitting between LLNL EOS and Simple EOS data at T=2000 K is assumed.
+c
+c   15.02.98: subroutine STATES (simple EOS) is added to be used in
+c   interiors for T > 1.0e8 K where no LLNL EOS data are available.
+c   It was extracted from the block EOSSTATE.ST3 and modified.
+c   No fitting between LLNL EOS and Simple EOS at T=1.0d8 K was assumed.
+c
+c        This file contains...
+c    subroutine:                                         used in:
+c ---------------------------------------------------------------------
+c  -  subroutine esac (xh,ztab,t6,r,irad)            envelope, interior
+c  -  subroutine t6rinterp(slr,slt)                  envelope, interior
+c  -  subroutine readco                              envelope, interior
+c  -  subroutine radsub (t6,density,moles,tmass)     envelope, interior
+c  -  function quad(ic,i,x,y1,y2,y3,x1,x2,x3)        envelope, interior
+c  -  function gmass(x,z,amoles,eground,fracz,frac)  envelope, interior
+c  -  block data                                     envelope, interior
+c
+c  -  state   (use LLNL EOS and Simple EOS)               only interior
+c  -     statel  (use LLNL EOS)                           only interior
+c  -     states  (use Simple EOS)                           only interior
+c  -        electr - reads and interpolates all thermodynamic functions
+c                    for electron gas from the disk file ELECTRON.GAS
+c
+c  -  termo   (use LLNL EOS and Simple EOS)               only envelope
+c  -     termol  (~=termo=LLNL EOS from llnl_env.s37)     only envelope
+c  -     termos  (~=termo=simple EOS from envelope.st3)   only envelope
+c  -        energ                                         only envelope
+c  -        fzz                                           only envelope
+c
+c **************************************************************************
+c     Calling program should contain something like following lines.
+c     See subroutine esac for definitions
+c      character*3 fixedTP
+c      data fixedTP/'yes'/  ! 'yes' for fixed T6,P; 'no' for fixed T6,rho
+c      common/e/ esact,eos(4)
+c
+c      fixedtp='no'
+c      irad=1     ! add radiation  corrections
+c
+c      ztab=...
+c      x=...
+c      t6=...
+c      rho=...
+c      call esac(x,ztab,t6,rho,irad)
+c
+c      write (*,*)' esact = ', esact
+c      do i=1,4
+c         write (*,*)' eos(i) = ', eos(i)
+c      enddo
+c*************************************************************************
+      subroutine esac (xh,ztab,t6,r,irad)
+      implicit double precision (a-h,o-z)
+c..... The purpose of this subroutine is to interpolate 
+c      the equation of state and its derivatives in X, T6, density
+c        izi=0 recalulate table indices to use; =1 keep previous
+c        xh=hydrogen mass fraction
+c        ztab is metal fraction of the EOSdata tables you are using.
+c           included only for purpose of preventing mismatch
+c        t6=T6=temperature in millions of degrees kelvin
+c        r=rho=Rho=density(g/cm**3)
+c..... to use esac insert common/eeos/ esact,eos(4) in the calling routine.
+c      This common contains the interpolated EOS values for the EOS
+c
+c..... eos(i) are obtained from a quadradic interpolation at
+c      fixed T6 at three values of Rho; followed by quadratic
+c      interpolation along T6. Results smoothed by mixing
+c      overlapping quadratics.
+c         definitions:
+c     
+c            T6 is the temperature in units of 10**6 K
+c 
+c            rho is the density in grams/cc
+c            R=Rho/T6**3
+
+c            eos(1) is the pressure in megabars (10**12dyne/cm**2)
+c            eos(2) is the specific heat, dE/dT6 at constant V.
+c            eos(3) is dlogP/dlogRho at constant T6. 
+c                   Cox and Guil1 eq 9.82
+c            eos(4) is dlogP/dlogT6 at conxtant Rho.
+c                   Cox and Guil1 eq 9.81
+
+c            irad  if =0 no radiation correction; if =1 adds radiation
+
+      save
+      integer w
+      real*8 moles
+c      parameter (mx=5,mv=4,nr=169,nt=191)
+      parameter (mx=5,mv=4,nr=169,nt=197)
+      character blank*1
+      common/lreadco/itime
+      common/eeeos/ epl(mx,nt,nr),xx(mx)
+      common/aaeos/ q(4),h(4),xxh
+      real*4 xz
+      common/aeos/  xz(mx,mv,nt,nr),  
+     . t6list(nr,nt),rho(nr),t6a(nt),esk(nt,nr),esk2(nt,nr),dfsx(mx)
+     . ,dfs(nt),dfsr(nr),m,mf,xa(mx)
+      common/beos/ zz(mx),nta(nr)
+      common/bbeos/l1,l2,l3,l4,k1,k2,k3,k4,ip,iq
+      common /eeos/ esact,eos(mv)
+      dimension frac(7)
+      data aprop/83.14511d0/
+      blank=' '
+      if ((irad .ne. 0) .and. (irad .ne. 1)) then
+         write (*,'(" Irad must be 0 or 1")')
+         stop
+      endif
+
+      xxi=xh
+      ri=r
+c
+      slt=t6
+      slr=r
+c
+      if(itime .ne. 12345678) then
+        itime=12345678
+        do  i=1,mx
+          xx(i)=xa(i)
+        enddo
+c
+c..... read the data files
+        call readcoeos
+        z=zz(1)
+        if (abs(ztab-z).gt.1.0d-6) then
+      write (*,'('' requested z='',f10.6,'' EOSdata is for z='',f10.6)')
+     x    ztab,z      
+        stop
+        endif
+
+        if(z+xh-1.d-6 .gt. 1 ) go to 61
+      endif
+c
+c
+c..... Determine T6,rho grid points to use in the
+c      interpolation.
+      if((slt .gt. t6a(1)).or.(slt .lt. t6a(nt))) go to 62
+      if((slr .lt. rho(1)).or.(slr .gt. rho(nr))) go to 62
+c
+c
+c
+c     if (izi .eq. 0) then  ! freeze table indices if not 0
+        ilo=2
+        ihi=mx
+    8   if(ihi-ilo .gt. 1) then
+          imd=(ihi+ilo)/2
+            if(xh .le. xa(imd)+1.d-7) then
+              ihi=imd
+            else
+              ilo=imd
+            endif
+          go to 8
+        endif
+        i=ihi
+        mf=i-2
+        mg=i-1
+        mh=i
+        mi=i+1
+        mf2=mi
+        if (xh .lt. 1.d-6) then
+        mf=1
+        mg=1
+        mh=1
+        mi=2
+        mf2=1
+        endif
+        if((xh .le. xa(2)+1.d-7) .or. (xh .ge. xa(mx-2)-1.d-7)) mf2=mh
+c
+        ilo=2
+        ihi=nr
+   12     if(ihi-ilo .gt. 1) then
+          imd=(ihi+ilo)/2
+           if (slr .eq. rho(imd)) then
+           ihi=imd
+           go to 13
+           endif
+            if(slr .le. rho(imd)) then
+              ihi=imd
+            else
+              ilo=imd
+            endif
+          go to 12
+          endif
+   13     i=ihi
+        l1=i-2
+        l2=i-1
+        l3=i
+        l4=l3+1
+        iqu=3
+        if(l4 .gt. nr) iqu=2
+c
+        ilo=nt
+        ihi=2
+   11     if(ilo-ihi .gt. 1) then
+          imd=(ihi+ilo)/2
+           if (t6 .eq. t6list(1,imd)) then
+           ilo=imd
+           go to 14
+           endif
+            if(t6 .le. t6list(1,imd)) then
+              ihi=imd
+            else
+              ilo=imd
+            endif
+          go to 11
+          endif
+   14     i=ilo
+        k1=i-2
+        k2=i-1
+        k3=i
+        k4=k3+1
+        ipu=3
+        if (k4 .gt. nt) ipu=2
+      if (k3 .eq. 0) then
+      write (*,'('' ihi,ilo,imd'',3i5)')
+      endif
+
+c     endif
+
+c     check to determine if interpolation indices fall within
+c     table boundaries.  choose largest allowed size.
+      sum1=0.0
+      sum2=0.0
+      sum23=0.0
+      sum33=0.0
+      do m=mf,mf2
+        do ir=l1,l1+1
+          do it=k1,k1+1
+            sum1=sum1+xz(m,1,it,ir)
+          enddo
+        enddo
+        do ir=l1,l1+2
+          do it=k1,k1+2
+            sum2=sum2+xz(m,1,it,ir)
+          enddo
+        enddo
+        if (ipu .eq. 3) then
+          do ir=l1,l1+2
+            do it=k1,k1+ipu
+              sum23=sum23+xz(m,1,it,ir)
+            enddo
+          enddo
+        else
+          sum23=2.d+30
+        endif
+        if (iqu .eq. 3) then
+          do ir=l1,l1+3
+            do it=k1,k1+ipu
+              sum33=sum33+xz(m,1,it,ir)
+            enddo
+          enddo
+        else
+          sum33=2.d+30
+        endif
+      enddo
+      iq=2
+      ip=2
+      if (sum2 .gt. 1.d+30) then
+        if (sum1 .lt. 1.d+25 ) then
+          k1=k3-3
+          k2=k1+1
+          k3=k2+1
+          l1=l3-3
+          l2=l1+1
+          l3=l2+1
+          go to 15
+            else
+          go to 65
+        endif
+      endif
+      if (sum23 .lt. 1.d+30) ip=3
+      if (sum33 .lt. 1.d+30) iq=3
+
+      if(t6 .ge. t6list(1,2)+1.d-7) ip=2
+      if(slr .le. rho(2)+1.d-7) iq=2
+
+      if((l3 .eq. nr) .or. (k3 .eq. nt)) then
+         iq=2
+         ip=2
+      endif
+
+   15 continue
+      do 124 iv=1,mv
+      do 123 m=mf,mf2
+ 
+      is=0
+ 
+c__________
+      do ir=l1,l1+iq
+        do it=k1,k1+ip
+        epl(m,it,ir)=xz(m,iv,it,ir)
+        is=1
+        enddo
+      enddo
+  123 continue
+      if((zz(mg) .ne. zz(mf)) .or. (zz(mh) .ne. zz(mf))) then
+        write(*,'('' Z does not match Z in EOSdata files you are''
+     x ,'' using'')')
+        stop
+      endif
+      if(z .ne. zz(mf)) go to 66
+      is=0
+      iw=1
+      do 45 ir=l1,l1+iq
+        do it=k1,k1+ip
+          if (mf2 .eq. 1) then
+          esk(it,ir)=epl(mf,it,ir)
+          go to 46
+          endif
+          esk(it,ir)=quadeos(is,iw,xh,epl(mf,it,ir),epl(mg,it,ir)
+     x    ,epl(mh,it,ir),xx(mf),xx(mg),xx(mh))
+          if(esk(it,ir) .gt. 1.d+20) then
+          write(*,'('' problem it ir,l3,k3,iq,ip='', 6i5)') it,ir
+     x    ,l3,k3,iq,ip
+          write(*,'(3e12.4)')  (epl(ms,it,ir),ms=mf,mf+2)
+          endif
+          is=1
+   46     continue
+        enddo
+   45 continue
+
+      if (mi .eq. mf2) then  ! interpolate between quadratics
+      is=0
+      iw=1
+       dixr=(xx(mh)-xh)*dfsx(mh)
+      do 47 ir=l1,l1+iq
+        do it=k1,k1+ip
+          esk2(it,ir)=quadeos(is,iw,xh,epl(mg,it,ir),epl(mh,it,ir)
+     x    ,epl(mi,it,ir),xx(mg),xx(mh),xx(mi))
+          if(esk(it,ir) .gt. 1.d+20) then
+          write(*,'('' problem it ir,l3,k3,iq,ip='', 6i5)') it,ir
+     x    ,l3,k3,iq,ip
+          write(*,'(3e12.4)')  (epl(ms,it,ir),ms=mg,mg+2)
+          endif
+          esk(it,ir)=esk(it,ir)*dixr+esk2(it,ir)*(1.-dixr)
+          is=1
+        enddo
+   47 continue
+   
+
+      endif
+
+      is=0
+c
+c..... completed X interpolation. Now interpolate T6 and rho on a
+c      4x4 grid. (t6a(i),i=i1,i1+3),rho(j),j=j1,j1+3)).Procedure
+c      mixes overlapping quadratics to obtain smoothed derivatives.
+c
+c
+      call t6rinteos(slr,slt)
+      eos(iv)=esact
+  124 continue
+
+      p0=t6*r
+      eos(1)=eos(1)*p0   ! interpolated in p/po
+      tmass=gmass(xh,z,moles,eground,fracz,frac)
+      if (irad .eq. 1) then
+      call radsub (t6,r,moles,tmass)
+      endif
+      return
+
+   61 write(*,'('' Mass fractions exceed unity (61)'')')
+      stop
+   62 write(*,'('' T6/LogR outside of table range (62)'')')
+      stop
+   65 write(*,'('' T6/log rho in empty region od table (65)'')')
+      write (*,'('' xh,t6,r='', 3e12.4)') xh,t6,r
+      stop
+   66 write(*,'('' Z does not match Z in EOSdata* files you are'',
+     . '' using (66)'')')
+      write (*,'('' mf,zz(mf)='',i5,e12.4)') mf,zz(mf)
+      write (*,'(''  iq,ip,k3,l3,xh,t6,r,z= '',4i5,4e12.4)')
+     x ip,iq,k3,l3,xh,t6,r,z
+      stop
+      return
+      end
+
+c***********************************************************************
+      subroutine t6rinteos(slr,slt)
+      implicit double precision (a-h,o-z)
+c     The purpose of this subroutine is to interpolate in T6 and rho
+      save
+c      parameter (mx=5,mv=4,nr=169,nt=191)
+      parameter (mx=5,mv=4,nr=169,nt=197)
+       common/eeeos/ epl(mx,nt,nr),xx(mx)
+      common/aaeos/ q(4),h(4),xxh
+      real*4 xz
+      common/aeos/  xz(mx,mv,nt,nr),  
+     . t6list(nr,nt),rho(nr),t6a(nt),esk(nt,nr),esk2(nt,nr),dfsx(mx)
+     . ,dfs(nt),dfsr(nr),m,mf,xa(mx)
+      common/bbeos/l1,l2,l3,l4,k1,k2,k3,k4,ip,iq
+      common/eeos/esact,eos(mv)
+c
+      iu=0
+      is=0
+
+      do kx=k1,k1+ip
+          iw=1
+        iu=iu+1
+        h(iu)=quadeos(is,iw,slr,esk(kx,l1),esk(kx,l2),esk(kx,l3),
+     x  rho(l1),rho(l2),rho(l3))
+          if(iq. eq. 3) then
+            iw=2
+            q(iu)=quadeos(is,iw,slr,esk(kx,l2),esk(kx,l3),esk(kx,l4),
+     x      rho(l2),rho(l3),rho(l4))
+          endif
+        is=1
+      enddo
+c
+      is=0
+      iw=1
+c..... eos(i) in lower-right 3x3(i=i1,i1+2 j=j1,j1+2)
+      esact=quadeos(is,iw,slt,h(1),h(2),h(3),t6a(k1),t6a(k2),t6a(k3))
+        if (iq. eq. 3) then
+c.....    eos(i) upper-right 3x3(i=i1+1,i1+3 j=j1,j1+2)
+          esactq=quadeos(is,iw,slt,q(1),q(2),q(3),t6a(k1),t6a(k2),
+     x           t6a(k3))
+        endif
+        if(ip .eq. 3) then
+c.....    eos(i) in lower-left 3x3.
+          esact2=quadeos(is,iw,slt,h(2),h(3),h(4),t6a(k2),t6a(k3),
+     x           t6a(k4))
+c.....    eos(i) smoothed in left 3x4
+          dix=(t6a(k3)-slt)*dfs(k3)
+          esact=esact*dix+esact2*(1.-dix)
+c       endif   ! moved to loc a
+        if(iq .eq. 3) then
+ 
+c.....     eos(i) in upper-right 3x3.
+          esactq2=quadeos(is,iw,slt,q(2),q(3),q(4),t6a(k2),t6a(k3),
+     x            t6a(k4))
+          esactq=esactq*dix+esactq2*(1.-dix)
+        endif
+        endif  ! loc a
+c
+        if(iq .eq. 3) then
+          dix2=(rho(l3)-slr)*dfsr(l3)
+            if(ip .eq. 3) then
+c.....        eos(i) smoothed in both log(T6) and log(R)
+              esact=esact*dix2+esactq*(1-dix2)
+            endif
+        endif
+        if (esact .gt. 1.d+15) then
+          write(*,'('' Interpolation indices out of range'',
+     x              '';please report conditions.'')') 
+          stop
+        endif
+
+      return
+      end
+
+c
+c**********************************************************************
+      subroutine readcoeos
+      implicit double precision (a-h,o-z)
+c..... The purpose of this subroutine is to read the data tables
+      save
+c      parameter (mx=5,mv=4,nr=169,nt=191)
+      parameter (mx=5,mv=4,nr=169,nt=197)
+      real*8 moles
+      character*1 blank
+      common/aaeos/ q(4),h(4),xxh
+      real*4 xz
+      common/aeos/  xz(mx,mv,nt,nr),  
+     . t6list(nr,nt),rho(nr),t6a(nt),esk(nt,nr),esk2(nt,nr),dfsx(mx)
+     . ,dfs(nt),dfsr(nr),m,mf,xa(mx)
+      common/beos/ zz(mx),nta(nr)
+      common/eeos/esact,eos(mv)
+      common/eeeos/ epl(mx,nt,nr),xx(mx)
+      common/eeeeos/moles(mx),xin(mx),tmass(mx),rhogr(mx,nr)
+     x    ,frac(mx,6),alogr(nr,nt),icycuse(mx,nr)
+
+
+
+      blank=' '
+      ifile=89            ! file number for the file EOSDATA
+
+
+        if (itimeco .ne. 12345678) then
+        do i=1,mx
+          do j=1,mv 
+            do k=1,nt
+              do l=1,nr
+                xz(i,j,k,l)=1.d+35
+              enddo
+            enddo
+          enddo
+        enddo
+        itimeco=12345678
+        endif
+ 
+      close (ifile)
+c..... read  tables
+       open(ifile, FILE='eosdata5',status='old')
+ 
+ 
+      do 3 m=1,mx
+
+      read (ifile,'(3x,f6.4,3x,f12.9,11x,f10.7,17x,f10.7)')
+     x  xin(m),zz(m),moles(m),tmass(m)
+      read (ifile,'(21x,e14.7,4x,e14.7,3x,e11.4,3x,e11.4,3x,e11.4,
+     x 4x,e11.4)') (frac(m,i),i=1,6)
+      read (ifile,'(a)') blank
+      do 2 jcs=1,nr
+      read (ifile,'(2i5,2f12.7,17x,e15.7)') numtot,icycuse(m,jcs)
+     x  ,dum,dum,rhogr(m,jcs)
+      if(numtot .ne. jcs) then
+         write (*,'('' Data file incorrect: numtot,jcs= '',2i5)')
+     x     numtot,jcs
+         stop
+      endif
+      read(ifile,'(a)') blank
+      read(ifile,'(a)') blank
+      if (icycuse(m,jcs) .lt. nta(jcs)) then
+	 write (*,*) icycuse(m,jcs), nta(jcs)        ! eigenzusatz
+         write (*,'('' problem with data files: X='',f6.4,'' density='',
+     x      e14.4)') xin(m), rhogr(m,jcs)
+         stop
+      endif
+      do  i=1,icycuse(m,jcs)
+      if (i .gt. nta(jcs)) then
+         read (ifile,'(a)') blank
+         go to 4
+      endif
+      read (ifile,'(f9.5,1x,f6.2,1e13.5,3f8.4)')
+     x t6list(jcs,i),alogr(jcs,i),(xz(m,iv,i,jcs),iv=1,mv)
+    4 continue
+      enddo
+      read(ifile,'(a)') blank
+      read(ifile,'(a)') blank
+      read(ifile,'(a)') blank
+    2 continue
+      read(ifile,'(a)') blank
+    3 continue
+ 
+      do i=1,nt
+         if(t6list(1,i) .eq. 0.0) then
+            write(*,'('' READCOEOS: Error:'',i4,
+     $           ''-th T6 value is zero'')') i
+            stop
+         endif
+         t6a(i)=t6list(1,i)
+      enddo
+      do 12 i=2,nt
+   12 dfs(i)=1./(t6a(i)-t6a(i-1))
+      rho(1)=rhogr(1,1)
+      do 13 i=2,nr
+      rho(i)=rhogr(1,i)
+   13 dfsr(i)=1./(rho(i)-rho(i-1))
+      do i=2,mx
+      dfsx(i)=1./(xx(i)-xx(i-1))
+      enddo
+      return
+      end
+c
+c***********************************************************************
+      function quadeos(ic,i,x,y1,y2,y3,x1,x2,x3)
+      implicit double precision (a-h,o-z)
+c..... this function performs a quadratic interpolation.
+      save
+      dimension  xx(3),yy(3),xx12(30),xx13(30),xx23(30),xx1sq(30)
+     . ,xx1pxx2(30)
+      xx(1)=x1
+      xx(2)=x2
+      xx(3)=x3
+      yy(1)=y1
+      yy(2)=y2
+      yy(3)=y3
+        if(ic .eq. 0) then
+          xx12(i)=1./(xx(1)-xx(2))
+          xx13(i)=1./(xx(1)-xx(3))
+          xx23(i)=1./(xx(2)-xx(3))
+          xx1sq(i)=xx(1)*xx(1)
+          xx1pxx2(i)=xx(1)+xx(2)
+        endif
+      c3=(yy(1)-yy(2))*xx12(i)
+      c3=c3-(yy(2)-yy(3))*xx23(i)
+      c3=c3*xx13(i)
+      c2=(yy(1)-yy(2))*xx12(i)-(xx1pxx2(i))*c3
+      c1=yy(1)-xx(1)*c2-xx1sq(i)*c3
+      quadeos=c1+x*(c2+x*c3)
+      return
+      end
+c******************************************************************8
+      function gmass(x,z,amoles,eground,fracz,frac)
+      implicit double precision (a-h,o-z)
+      dimension anum(6),frac(7), amas(7),eion(7)
+      data (eion(i),i=1,6)/-3394.873554d0,-1974.86545d0,-1433.92718d0,
+     x  -993.326315d0,-76.1959403d0,-15.29409d0/
+      data (anum(i),i=1,6)/10.,8.,7.,6.,2.,1./
+      xc=0.247137766d0
+      xn=.0620782d0
+      xo=.52837118d0
+      xne=.1624188d0
+      amas(7)=1.0079d0
+      amas(6)=4.0026d0
+      amas(5)=12.011d0
+      amas(4)=14.0067d0
+      amas(3)=15.9994d0
+      amas(2)=20.179d0
+      amas(1)=0.00054858d0
+      fracz=z/(xc*amas(5)+xn*amas(4)+xo*amas(3)+xne*amas(2))
+      xc2=fracz*xc
+      xn2=fracz*xn
+      xo2=fracz*xo
+      xne2=fracz*xne 
+      xh=x/amas(7)
+      xhe=(1.d0-x -z)/amas(6)
+      xtot=xh+xhe+xc2+xn2+xo2+xne2
+      frac(6)=xh/xtot
+      frac(5)=xhe/xtot
+      frac(4)=xc2/xtot
+      frac(3)=xn2/xtot
+      frac(2)=xo2/xtot
+      frac(1)=xne2/xtot
+      eground=0.0
+      amoles=0.0
+      do i=1,6
+      eground=eground+eion(i)*frac(i)
+      amoles=amoles+(1.d0+anum(i))*frac(i)
+      enddo
+      anume=amoles-1.d0
+      gmass=0.
+      do i=2,7
+      gmass=gmass+amas(i)*frac(i-1)
+      enddo
+
+      return
+      end
+c
+c
+c***********************************************************************
+      subroutine radsub (t6,density,moles,tmass)
+      implicit double precision (a-h,o-z)
+c      parameter (mx=5,mv=4,nr=169,nt=191)
+      parameter (mx=5,mv=4,nr=169,nt=197)
+      real*8 moles,k,molenak,Na
+      common/eeos/esact,eos(mv)
+      common/beos/ zz(mx),nta(nr)
+
+      data Na/6.0221367d+23/, k/1.380658d-16/, unitf/0.9648530d0/, 
+     x unitfold/0.965296d0/, c/2.9979245d+10/, sigma/5.67051d-5/
+     x , sigmac/1.8914785d-15/, sigmacc/1.8914785d-3/, aprop/83.14510d0/
+
+cPhysical constants
+c       Na=6.0221367d+23
+c       k =1.380658d-16 !   erg/degree K
+c       Na*k=6.0221367d+23*1.380658d-16 erg/degree K=8.314510d+7 erg/degree K
+c           =8.314510d+7*11604.5 erg/eV=0.9648575d+12 erg/eV
+c           Define unitf= Na*k/e+12=0.9648575
+c           unitf=0.9648530  ! obtained with latest physical constants
+c           In these units energy/density is in units of Mb-CC/gm
+c           Pressure is in units of E+12 bars=Mb
+c       sigma is the Stefan-Boltzmann constant
+c       sigma=5.67051d-5 !   erg /(s*cm**2*K**4)
+c       c=2.99792458d+10 !   cm/sec
+
+c     rat=sigma/c    ! dyne/(cm**2*K**4)
+
+c     rat=rat*1.d+24  !   Convert degrees K to units 10**6 K (T replaced with T6)
+      rat=sigmacc
+
+      pr=4.d0/3.d0*rat*t6**4   ! Mb 
+      er=3.d0*pr/density   ! Mb-cc/gm
+      sr=4.d0/3.d0*er/t6   ! Mb-cc/(gm-unit T6)
+      pt=eos(1)+pr
+      chir=eos(3)*eos(1)/pt
+      chitt=(eos(1)*eos(4)+4.d0*pr)/pt
+      molenak=moles*aprop  ! Mb-cc/unit T6
+      cvtt=eos(2)*molenak/tmass+4.d0*er/t6
+      gam3pt=pt*chitt/(cvtt*density*t6)
+      gam1t=chir+chitt*gam3pt
+      gam2pt=gam1t/gam3pt
+
+c     normalize cvt to 3/2 when gas is ideal,non-degenerate,
+c     fully-ionized, and has no radiation correction
+c     cvt=(eos(5)*molenak/tmass+4.*er/t6)
+c    x  /molenak
+      eos(1)=pt
+      eos(2)=cvtt
+      eos(3)=chir
+      eos(4)=chitt
+      return
+      end
+c***********************************************************************
+      block data
+      implicit double precision (a-h,o-z)
+c      parameter (mx=5,mv=4,nr=169,nt=191)
+      parameter (mx=5,mv=4,nr=169,nt=197)
+      common/aaeos/ q(4),h(4),xxh
+      real*4 xz
+      common/aeos/  xz(mx,mv,nt,nr),  
+     . t6list(nr,nt),rho(nr),t6a(nt),esk(nt,nr),esk2(nt,nr),dfsx(mx)
+     . ,dfs(nt),dfsr(nr),m,mf,xa(mx)
+      common/beos/ zz(mx),nta(nr)
+      data (xa(i),i=1,mx)/0.0,0.2,0.4,0.6,0.8/
+c      data (nta(i),i=1,nr)/92*191,190,189,188,187,186,185,184,174,
+c     x  4*134,3*133,2*132,98,92,2*85,2*77,71,3*63,2*59,53,51,
+c     x  2*46,9*44,3*38,6*33,16*29,27,26,25,23,22,20,19,18,17,16/
+      data (nta(i),i=1,nr)/87*197,7*191,190,2*189,185,179,170,2*149,
+     x  133,125,123,122,120,115,113,107,102,2*80,72,68,66,64,62,56,
+     x  54,52,51,2*50,49,47,2*45,43,42,28*40,39,37,36,35,34,32,31,30,
+     x  29,27,26/
+
+      end
+c*************************************************************************
+c.............................................................................
+c LLNL EOS PLUS   &   Simple EOS
+      subroutine state(rh,t,xvec,extra)           ! subroutine for INTERIOR !
+      implicit double precision (a-h,o-z)
+      include 'data.s37'
+      parameter (tmax = 1.0d8)       ! maximal T for LLNL EOS PLUS tables
+      dimension xvec(nx),extra(20)
+c
+c input:
+c     rh  = density                                    [g/cm**3]
+c     t   = temperature                                [K]
+c     x   = hydrogen content                           [by mass fraction]
+c     z   = heavy element content                      [by mass fraction]
+c                  helium content: y=1-x-z
+c..............................................................................
+c
+      if (t.le.tmax) then
+         call statel(rh,t,xvec,extra)
+      endif
+c
+      if (t.gt.tmax) then
+         call states(rh,t,xvec,extra)
+      endif
+c                            --- end of "state"
+      end
+c.............................................................................
+c LLNL EOS PLUS
+      subroutine statel(rh,t,xvec,extra)           ! subroutine for INTERIOR !
+      implicit double precision (a-h,o-z)
+      include 'data.s37'
+      dimension xvec(nx),extra(20)
+c      real*4 ro1,t61,x1,y1,ztab1,esact,eos(4),sigmacc  ! for Single Precision
+      real*8 ro1,t61,x1,y1,ztab1,esact,eos(4),sigmacc  ! for Double Precision
+      common/eeos/ esact,eos
+      data sigmacc/1.8914785d-3/
+c
+c subject:
+c     Use equation of state LLNL EOS PLUS.
+c
+c input:
+c     rh  = density                                    [g/cm**3]
+c     t   = temperature                                [K]
+c     x   = hydrogen content                           [by mass fraction]
+c     z   = heavy element content                      [by mass fraction]
+c                  helium content: y=1-x-z
+c output:
+c     ptot = total pressure (radiation+ions+electrons) [dyn/cm**2]
+c     pt   = d log ptot / d log t     (at constant density)
+c     pr   = d log ptot / d log rh    (at constant temperature)
+c     prad = radiation pressure
+c     pgas = gas pressure (ions+electrons)
+c     grad = adiabatic temperature gradient: (d log t / d log ptot)ad
+c     qt   = t*cv, where "cv" is specific heat at constant volume (per gram)
+c     qr   = qt * ( d log t / d log rh) at constant entropy
+c
+c auxiliary variables:
+c     y     = helium content                           [by mass fraction]
+c..............................................................................
+c
+      x    = xvec(1)
+      y    = xvec(3)
+      z    = 1.d0-x-y
+c
+      irad=1     ! add radiation  corrections
+      x1=x
+      y1=y
+      ztab1 = z
+      ro1   = rh
+      t61   = t/1.0d6
+c ====================================================
+      call esac(x1,ztab1,t61,ro1,irad)
+c ====================================================
+      ptot   = eos(1)*1.0d12
+c From LLNL subroutines:
+c      sigma   = 5.67051d-5                      ! erg /(s*cm**2*K**4)
+c      c       = 2.99792458d+10                  ! cm/sec
+c      sigmacc = sigma/c*1.d12 = 1.8914785d-3    ! dyne/(cm**2*K**4)
+      prad   = 4.d0/3.d0*sigmacc*t61**4*1.0d12
+      pgas   = ptot-prad
+      pr     = eos(3)
+      pt     = eos(4)
+      dut    = eos(2)*1.0d6
+      cv     = dut
+      qt     = t*cv
+      qr     = pt*ptot/rh
+      grad   = 1.d0/(pt+pr*qt/qr)
+c      gam1   = eos(5)
+c      q      = pt/pr
+c      cp     = cv+q*p/(rh*t)*pt
+c      grad   = ptot*q/(rh*t*cp)         ! alternative comp. grad
+c
+c                            --- store output results
+      extra(1)=ptot
+      extra(2)=pt
+      extra(3)=pr
+      extra(4)=pgas
+      extra(5)=prad
+      extra(6)=grad
+      extra(7)=qt
+      extra(8)=qr
+c      extra(13)=gam1
+c                                          --- end of "statel"
+      end
+c
+c..............................................................................
+c Simple EOS
+      subroutine states(rh,t,xvec,extra)           ! subroutine for INTERIOR !
+      implicit double precision (a-h,o-z)
+      include 'data.s37'
+      dimension xvec(nx),extra(20)
+c
+c subject:
+c     calculate equation of state and thermodynamic quantities.
+c     Equation of state includes contributions from:
+c      - nondegenerate/degenerate electrons
+c      - nondegenerate ions
+c      - radiation
+c input:
+c     rh  = density                                    [g/cm**3]
+c     t   = temperature                                [K]
+c     x   = hydrogen content                           [by mass fraction]
+c     z   = heavy element content                      [by mass fraction]
+c                  helium content: y=1-x-z
+c output:
+c     ptot = total pressure (radiation+ions+electrons) [dyn/cm**2]
+c     pt   = d log ptot / d log t     (at constant density)
+c     pr   = d log ptot / d log rh    (at constant temperature)
+c     prad = radiation pressure
+c     pgas = gas pressure (ions+electrons)
+c     grad = adiabatic temperature gradient: (d log t / d log ptot) at constant
+c                                                                   entropy
+c     qt   = t*cv, where "cv" is specific heat at constant volume (per gram)
+c     qr   = qt * ( d log t / d log rh) at constant entropy
+c predefined in 'data.s37':
+c     arad,fku
+c auxiliary variables:
+c     y     = helium content                           [by mass fraction]
+c     fmi   = mean molecular weight of ions (oxygen stands for heavy elements)
+c     fme   = mean molecular weight per free electron (full ionization)
+c     pion  = ion pressure (perfect gas law)
+c     pel   = electron pressure
+c     pelt  = d log pel / d log t   (at constant density)
+c     pelr  = d log pel / d log rh  (at constant temperature)
+c..............................................................................
+c
+      x    = xvec(1)
+      y    = xvec(3)
+      z    = 1.-x-y
+
+      fmi=1./(x/ahyd+     y/ahe4+z/2.d0/zavrge)
+      fme=1./(x/ahyd+2.d0*y/ahe4+z/2.d0)
+      prad=arad/3.*t**4
+      pion=fku/fmi*rh*t
+
+      call ELECTR(rh,t,fme,pel,pelt,pelr,qte)
+      ptot=pion+pel+prad
+      pt=(pion+pel*pelt+prad*4)/ptot
+      pr=(pion+pel*pelr)/ptot
+      qt=(1.5*pion+12.*prad)/rh+qte
+      qr=pt*ptot/rh
+      grad=1./(pt+pr*qt/qr)
+      pgas=pion+pel
+
+      extra(1)=ptot
+      extra(2)=pt
+      extra(3)=pr
+      extra(4)=pgas
+      extra(5)=prad
+      extra(6)=grad
+      extra(7)=qt
+      extra(8)=qr
+c                                          --- end of "states"
+      end
+c
+c........................................................................
+c  The following subroutine is based on a version by Stephen J. Ratcliff (1986)
+c
+      subroutine ELECTR(rh,t,fme,pel,pelt,pelr,qte)
+c --------------------------------------------------------
+c        This subroutine reads and interpolates all thermodynamic functions
+c        for electron gas in the tables stored in the common/TERMEL/ ,
+c                               and does this for 5.0 < log T < 8.0 ,
+c                                                -3.0 < log rho < 6.0 .
+c        Outside the table it calculates everything analytically.
+c        It provides a linear interpolation between the analytical formulae and
+c        the table interpolation within one table step around table boundary.
+c ---------------------------------------------------------------------------
+c    INPUT:
+c            rh  = density of gas   (g/cm**3)
+c            t   = temperature      (K)
+c            fme = mean number of nucleons per electron
+c
+c    OUTPUT:
+c            pel   = pressure due to electrons (dyn/cm**2)
+c            pelt  = d log (pel) / d log (t)
+c            pelr  = d log (pel) / d log (rh)
+c            qte   = dUe / d ln t, where Ue is the internal energy of electron
+c                                  gas per one gram of matter
+c ---------------------------------------------------------------------------
+      implicit real*8 (a-h,o-z)
+      implicit integer*4 (i-n)
+      include 'data.s37'
+c
+      common/TERMEL/fk1,fk2,tlz,dt,rhz,dr,terme(5,16,46),ntt,nr,inmemo
+      dimension datel(5)
+c  -----------------------
+      save /TERMEL/
+      if(inmemo.ne.99)go to 111
+  333 continue
+c
+      rhl=log10(rh/fme)
+      tl=log10(t)
+c
+      fr=(rhl-rhz)/dr+1
+      ir=int(fr)
+      fr=fr-ir
+      ft=(tl-tlz)/dt+1
+      it=int(ft)
+      ft=ft-it
+c
+      if(it.lt.1.or.it.ge.ntt.or.ir.lt.1.or.ir.ge.nr)go to 1
+c
+c -------------------------- INTERPOLATION FROM THE TABLE -------------------
+      do 2 k=1,5
+      datel(k)=(terme(k,it,ir)*(1-ft)+terme(k,it+1,ir)*ft)*(1-fr)
+     *        +(terme(k,it,ir+1)*(1-ft)+terme(k,it+1,ir+1)*ft)*fr
+    2 continue
+c
+      peln=1.0d1**datel(1)
+      peltn=datel(3)
+      pelrn=datel(4)
+      qten=datel(5)*1.0d1**datel(2)/fme
+c
+c ----------- END OF INTERPOLATION FROM THE TABLE ---------------------------
+c
+      if(it.lt.2.or.it.ge.(ntt-1).or.ir.lt.2.or.ir.ge.(nr-1))go to 1
+c
+c -------ELSE THE RESULTS ARE BASED ON INTERPOLATION IN THE TABLES ONLY -----
+c
+      pel=peln
+      pelt=peltn
+      pelr=pelrn
+      qte=qten
+      return
+
+    1 continue
+c ----------------------- ANALYTICAL CALCULATIONS --------------------------
+c
+c   pressures: deg.-rel.,deg.-nonrel.,nondeg.
+c
+      pdr =fk2*(rh/fme)**(4.0d0/3.0d0)
+      pdnr=fk1*(rh/fme)**(5.0d0/3.0d0)
+      pnd=fku*t*rh/fme
+c
+      pd=pdnr/sqrt((pdnr/pdr)**2+1)
+      pel=pnd*sqrt((pd/pnd)**2+1)
+      pelt=(pnd/pel)**2
+      facd=(pd/pdnr)**2*5.0d0/3.0d0+(pd/pdr)**2*4.0d0/3.0d0
+      pelr=pelt+(pd/pel)**2*facd
+      qte=pelt*pel/(facd-1)/rh
+c -------------------------------- END OF ANALYTICAL CALCULATIONS ----------
+
+      if(it.lt.1.or.it.ge.ntt.or.ir.lt.1.or.ir.ge.nr)return
+
+c ------------------------- INTERPOLATION BETWEEN ANALYTICAL AND TABLE RESULTS
+      fact=1.0d0
+      if(it.lt.2)fact=ft
+      if(it.ge.(ntt-1))fact=1-ft
+      facr=1.0d0
+      if(ir.lt.2)facr=fr
+      if(ir.ge.(nr-1))facr=1-fr
+c
+      fac=fact*facr
+      fac1=1-fac
+c
+      pel=pel*fac1+peln*fac
+      pelt=pelt*fac1+peltn*fac
+      pelr=pelr*fac1+pelrn*fac
+      qte=qte*fac1+qten*fac
+
+      return
+  111 continue
+c
+c ------------------------------
+c        This block reads the tables of Fermi integrals for the electron-
+c        positron gas, partially degenerate, partially ionized, with mean
+c        number of nucleons per electron, mu e = 1.0 . The tables are input
+c        from the file 'electron.gas' through the unit = 9 .
+c --------------
+c   input:
+c        UNIT 9   -  input file of tables of Fermi integrals 'electron.gas'
+c        UNIT 0   -  diagnostic output
+c ---------------------------------------------------------------------------
+c
+      fk1=(3.d0/pi)**(2.d0/3.d0)/20.d0*hplanc**2/elmass/amu**(5.d0/3.d0)
+      fk2=(3.d0/pi)**(1.d0/3.d0)/ 8.d0*hplanc*clight   /amu**(4.d0/3.d0)
+      it=16
+      ir=46
+c
+        open(9,file='electron.gas',status='old',iostat=ioval)
+      if(ioval.ne.0)stop ': file "eostate.s37" -
+     * subroutine "electr" -  unable to open file "electron.gas"'
+        rewind (9)
+c
+      read (9,100) tlz,dt,ntt,rhz,dr,nr
+  100 format(1x,2(5x,2f8.4,i4))
+c
+      if (ntt.ne.it.or.nr.ne.ir)stop ': file "eostate.s37" -
+     * subroutine "electr" - "electron.gas": wrong size'
+c
+      do 22 i=1,ntt
+      do 3 j=1,nr
+      read (9,102) (terme(k,i,j),k=1,5)
+    3 continue
+   22 continue
+  102 format(1x,6f10.5)
+c
+      write(*,103)
+  103 format(/,' - thermodynamic data from file "electron.gas" O.K.',/)
+      close(9)
+c
+      inmemo=99
+      go to 333
+      end
+c.............................................................................
+c..............................................................................
+c LLNL EOS PLUS   &   Simple EOS
+      subroutine termo(ro,t,x,y,ionful,res)       ! subroutine for ENVELOPE !
+      implicit double precision (a-h,o-z)
+      include 'data.s37'
+c      parameter (tmin = 5000.0d0)       ! minimal T for LLNL EOS PLUS tables
+      parameter (tmin = 2000.0d0)       ! minimal T for LLNL EOS PLUS tables
+      dimension res(20)
+
+c
+c input:
+c     ro      density                                           [c.g.s.]
+c     t       temperature                                       [K]
+c     x       hydrogen mass fraction
+c     y       helium mass fraction
+c     ionful  control variable: (important only for Simple EOS:
+c                                = 1 to neglect partial ionization
+c                                = 0 to respect)
+c output:
+c     array res is described in TERMOL and TERMOS
+c..............................................................................
+c
+      if (t.ge.tmin) then
+         call termol(ro,t,x,y,ionful,res)
+      endif
+c
+      if (t.lt.tmin) then
+         call termos(ro,t,x,y,ionful,res)
+         xhe2 = res(12)
+         if (xhe2.gt.0.9999) ionful=1        ! switch to full ionization regime
+      endif
+c                            --- end of "termo"
+      end
+c..............................................................................
+c LLNL EOS PLUS
+      subroutine termol(ro,t,x,y,ionful,res)       ! subroutine for ENVELOPE !
+      implicit double precision (a-h,o-z)
+      include 'data.s37'
+      dimension res(20)
+c      real*4 ro1,t61,x1,y1,ztab1,esact,eos(4)  ! for Single Precision version
+      real*8 ro1,t61,x1,y1,ztab1,esact,eos(4)  ! for Double Precision version
+      common /eeos/ esact,eos
+
+c
+c input:
+c     ro      density                                           [c.g.s.]
+c     t       temperature                                       [K]
+c     x       hydrogen mass fraction
+c     y       helium mass fraction
+c     ionful  control variable: (not used here)
+c
+c output:
+c     res    = the output vector. All values in c.g.s.
+c     res(1) = p      = pressure
+c     res(2) = dpro   = (d p / d ro)t    (at constant temperature)
+c     res(3) = dpt    = (d p / d t)ro    (at constant density)
+c     res(4) = u      = specific internal energy                [erg/g]
+c     res(5) = cp     = (d u / d t)p   specific heat cap. at const. p
+c     res(6) = cv     = (d u / d t)ro specific heat cap. at const vol.
+c     res(7) = q      =-(d ln ro / d ln t)p
+c     res(8) = gradad = (d ln t / d ln p)s   adiabatic temperature gradient
+c     res(9) = vad    = adiabatic sound speed
+c     res(10)= 0
+c     res(11)= 0
+c     res(12)= 0
+c     res(13)= 0
+c     res(14)= error obtained from thermodynamic identity
+c..............................................................................
+c
+      irad=1     ! add radiation  corrections
+      x1=x
+      y1=y
+      ztab1 = 1.0-x1-y1
+      ro1   = ro
+      t61   = t/1.0d6
+c ====================================================
+      call esac(x1,ztab1,t61,ro1,irad)
+c ====================================================
+      p      = eos(1)*1.0d12
+      u      = 0.0d0
+      dpro   = eos(3)*p/ro
+      dpt    = eos(4)*p/t
+      dut    = eos(2)*1.0d6
+      cv     = dut
+      q      = eos(4)/eos(3)
+      cp     = cv+q/ro*dpt
+      gradad = P*q/(ro*t*cp)
+c      error  = abs(1.0d0-eos(7)-duro*ro**2/p)
+      error  = 0.0d0
+c      gam1   = eos(5)
+      vad    = sqrt(dpro*cp/dut)
+c
+c                            --- store output results
+      res(1) = p
+      res(2) = dpro
+      res(3) = dpt
+      res(4) = u
+      res(5) = cp
+      res(6) = cv
+      res(7) = q
+      res(8) = gradad
+      res(9) = vad
+      res(10)= 0.0d0
+      res(11)= 0.0d0
+      res(12)= 0.0d0
+      res(13)= 0.0d0
+c      res(13)= gam1
+      res(14)= error
+c                            --- end of "termol"
+      end
+c..............................................................................
+c Simple EOS
+      subroutine termos(ro,t,x,y,ionful,res)       ! subroutine for ENVELOPE !
+      implicit double precision (a-h,n-z)
+      include 'data.s37'
+      dimension res(20)
+c
+c attention:
+c     n incorporated into implicit double precision range.
+c input:
+c     ro      density                                           [c.g.s.]
+c     t       temperature                                       [K]
+c     x       hydrogen mass fraction
+c     y       helium mass fraction
+c     ionful  control variable:
+c                     = 1 to neglect partial ionization
+c                     = 0 to respect
+c output:
+c     res    = the output vector. All values in c.g.s.
+c     res(1) = p      = pressure
+c     res(2) = dpro   = (d p / d ro)t    (at constant temperature)
+c     res(3) = dpt    = (d p / d t)ro    (at constant density)
+c     res(4) = u      = specific internal energy                [erg/g]
+c     res(5) = cp     = (d u / d t)p   specific heat cap. at const. p
+c     res(6) = cv     = (d u / d t)ro specific heat cap. at const vol.
+c     res(7) = q      =-(d ln ro / d ln t)p
+c     res(8) = gradad = (d ln t / d ln p)s   adiabatic temperature gradient
+c     res(9) = vad    = adiabatic sound speed
+c     res(10)= xh1    = hydrogen ionisation degree
+c     res(11)= xhe1   = helium first ionisation degree
+c     res(12)= xhe2   = helium second ionisation degree
+c     res(13)= xh2    = hydrogen molecule dissociation degree
+c     res(14)= error obtained from thermodynamic identity
+c parameters taken from the file 'data.s37'
+c     fku, evolt, fkcnst, arad, eh2dys, ehion, eheion, ehe2io, zavrge,
+c     ahyd, ahe4, amu
+c remarks:
+c     an adjustment is made to take into account weak electron degeneracy:
+c     for full ionization case it is done here,
+c     for partial ionization it is assumed to be done in the subroutine ENERG.
+c..............................................................................
+c
+      z = 1.-x-y
+c                            === full ionization ===
+      if (ionful.ne.1) go to 2
+      xh1=1.0
+      xhe1=0.0
+      xhe2=1.0
+c                           --- p1 is for particles, p2 is for photons
+c                           --- u1 is for gas, u2 is for dissoc. and ionization
+c
+        nelect = (x/ahyd+2.d0*y/ahe4+z/2.d0)
+        nnucl  = (x/ahyd+y/ahe4+z/zavrge/2.d0)
+        fmue   = 1.d0/nelect
+        nedgen = nelect*(1. + 2.19d7*(ro/fmue)/t/sqrt(t))
+      p1  = fku*(nedgen + nnucl)
+      p2  = arad/3.0*t**3/ro
+      p   = (p1+p2)*ro*t
+      u1  = (1.5*p1 + 3.*p2)*t
+      u2  = (x/ahyd*(eh2dys+ehion) + y*(eheion+ehe2io)/ahe4)*evolt/amu
+      u   = u1+u2
+c
+      dpro  = p1*t
+      dpt   = (p1+4.*p2)*ro
+      duro  = -3.*p2*t/ro
+      dut   = 1.5*p1+12.*p2
+      go to 3
+c                            === partial ionization of hydrogen and helium ===
+    2 continue
+        dro=1.d-4*ro
+        dt=1.d-4*t
+      call energ(ro-dro,t-dt,x,y,p1,u1,xh1,xhe1,xhe2,xh2)
+      call energ(ro+dro,t-dt,x,y,p2,u2,xh1,xhe1,xhe2,xh2)
+      call energ(ro-dro,t+dt,x,y,p3,u3,xh1,xhe1,xhe2,xh2)
+      call energ(ro+dro,t+dt,x,y,p4,u4,xh1,xhe1,xhe2,xh2)
+c
+        p=(p1+p2+p3+p4)/4.
+        u=(u1+u2+u3+u4)/4.
+        dpro=(p2+p4-p1-p3)/dro/4.
+        dpt =(p3+p4-p1-p2)/dt/4.
+        duro=(u2+u4-u1-u3)/dro/4.
+        dut =(u3+u4-u1-u2)/dt/4.
+c
+c                            --- more complex thermodynamic functions
+    3 continue
+      q      = t/ro*dpt/dpro
+      cp     = dut+q/ro*dpt
+      cv     = dut
+      gradad = p*q/cp/ro/t
+      vad    = sqrt(dpro*cp/dut)
+
+c                            --- estimate error from the thermodynamic identity
+c
+      error=abs(1.0-t/p*dpt-duro*ro**2/p)
+c
+c                            --- store output results
+      res(1) = p
+      res(2) = dpro
+      res(3) = dpt
+      res(4) = u
+      res(5) = cp
+      res(6) = cv
+      res(7) = q
+      res(8) = gradad
+      res(9) = vad
+      res(10)= xh1
+      res(11)= xhe1
+      res(12)= xhe2
+      res(13)= xh2
+      res(14)= error
+c                            --- end of "termos"
+      end
+c
+c.............................................................................
+c                        date: mar 29 1990 - MKo version
+c                        jun 1990 - corrected by BP + his student (1 bug found)
+
+      subroutine energ(ro,t,x,y,p,u,xh1,xhe1,xhe2,xh2)
+      implicit double precision (a-h,n-z)
+      include 'data.s37'
+
+c attention:
+c     n incorporated into implicit double precision range.
+c input:
+c     ro      density                                       [c.g.s.]
+c     t       temp                                          [K]
+c     x       hydrogen mass fraction
+c     y       helium mass fraction
+c output:
+c     p       pressure                                      [c.g.s.]
+c     u       specific internal energy                      [erg/g]
+c     xh1     fraction of hydrogen that is ionized          [by mass fraction]
+c     xhe1    fraction of helium that is singly ionized     [by mass fraction]
+c     xhe2    fraction of helium that is doubly ionized     [by mass fraction]
+c     xh2     fraction of hydrogen in a molecular form (H2) [by mass fraction]
+c parameters taken from 'data.s37'
+c     elmass, evolt, fkcnst, arad, hplanc, fln10, pi,
+c     eh2dys, ehion, eheion, ehe2io, zavrge, ahyd, ahe4, amu
+c subroutines called:
+c     fzz
+c remarks:
+c     - the gas is assumed non-relativistic.
+c     - a first-order electron-degeneracy correction is made.
+c     - the metals are assumed to be fully ionized (poor assumption)
+c..............................................................................
+c
+      parameter (rhc1=0.1,     rhc2=0.3162,   rhc3=1.0)
+c
+c rhc1, rhc2, rhc3  - critical densities for pressure ionization of h, he, heII
+c rhc2: log10(rhc2)=-0.5  ==> rhc2=1/sqrt(10.)
+c
+      zet=1.d0-x-y
+      cnst1=(sqrt(2.*pi*elmass*fkcnst)/hplanc)**3
+      cnst1=cnst1*t*sqrt(t)
+      teta=evolt/fkcnst/fln10/t
+      flgt=log10(t)
+      fmue=1.d0/(x/ahyd+2.d0*y/ahe4+zet/2.d0)
+      nh=x*ro/ahyd/amu
+      nhe=y*ro/ahe4/amu
+      nmet=zet*ro/zavrge/2.d0/amu
+c                                       --- assume metals fully ionized
+      nmetel=nmet*zavrge
+
+      ne=0.0
+      nhi=nh
+      nhii=0.0
+      nhei=nhe
+      nheii=0.
+      nheiii=0.
+c
+      xh2=1.0
+      xh1=0.0
+      xhe1=0.0
+      xhe2=0.0
+c                                       --- the starting cond. for the calc.:
+c                                           all hydrogen in molecules,
+c                                           all helium neutral
+      fac1=0.0
+      fac2=0.0
+      fac3=0.0
+
+c                                       --- calculate hydrogen ionization:
+      hi=ehion
+      hi=hi*(1-ro/rhc1*(1+fkcnst*t/hi/evolt))
+      c=exp(-hi*evolt/fkcnst/t)/nh*cnst1
+c                                       --- if(c.lt.1d-10): almost all hydrogen
+c                                         is in molecules and helium is neutral
+      if(c.lt.1d-10) go to 21
+      if(c.gt.1d10) c=1d10
+      fac1=c*nh
+      b=c
+      bc=b/c/2.0
+      xx=1.0/(sqrt(bc*bc+1.0/c)+bc)
+c                                       --- xx is the positive root of the
+c                                           equation:     xx**2 + b*xx - c = 0
+         nhii=xx*nh
+         nhi=(1.0-xx)*nh
+         ne=nhii
+         xh1=xx
+c                                       --- (in the "bugged" version: xh=xx)
+
+c                                       --- calculate first helium ionization:
+      hi=eheion
+      hi=hi*(1-ro/rhc2*(1+fkcnst*t/hi/evolt))
+      c=exp(-hi*evolt/fkcnst/t)/nhe*cnst1
+c                                       --- if(c.lt.1d-10):  almost all helium
+c                                           is neutral
+      if(c.lt.1d-10) go to 21
+
+      if(c.gt.1d10) c=1d10
+      fac2=c*nhe
+      b=c+ne/nhe
+      bc=b/c/2.0
+      xx=1.0/(sqrt(bc*bc+1.0/c)+bc)
+         nheii=xx*nhe
+         nhei=(1.0-xx)*nhe
+         ne=ne+nheii
+
+c                                      --- calculate second helium ionization:
+      hi=ehe2io
+      hi=hi*(1-ro/rhc3*(1+fkcnst*t/hi/evolt))
+      c=exp(-hi*evolt/fkcnst/t)/nheii*cnst1
+c                                      --- if(c.lt.1d-10):  there is almost
+c                                          no doubly ionized helium
+      if(c.lt.1d-10) go to 20
+c                                      --- (in the "bugged" version: go to 21)
+
+      if(c.gt.1d10) c=1d10
+      fac3=c*nheii
+      b=c+ne/nheii
+      bc=b/c/2.0
+      xx=1.0/(sqrt(bc*bc+1.0/c)+bc)
+         nheiii=nheii*xx
+         nheii=nheii*(1.0-xx)
+         ne=ne+nheiii
+
+   20 continue
+c                                      --- approximate ionization equilibrium
+c                                          has been calculated, now calculate
+c                                          it more accurately:
+      f1=fac1/ne
+      f2=fac2/ne
+      f3=fac3/ne
+      f4=nh/ne
+      f5=nhe/nh
+c
+      call fzz(f1,f2,f3,f4,f5,zz)
+c
+      f1=f1/zz
+      f2=f2/zz
+      f3=f3/zz
+c
+      ne=ne*zz
+      xh1=f1/(1+f1)
+      xhe1=f2/(1+f2*(1+f3))
+      xhe2=xhe1*f3
+c
+      nhi=nh*(1-xh1)
+      nhii=nh*xh1
+      nhei=nhe*(1-xhe1-xhe2)
+      nheii=nhe*xhe1
+      nheiii=nhe*xhe2
+c                                          --- accurate ionization equilibrium
+c                                              has been calculated
+
+c                      --- calculate fractional abundance of molecular hydrogen
+c                          using formulae given by Vardya, M. S., 1960,
+c                          Ap. J. Suppl., 4, 281 (eqs. 6.16 - 6.19):
+   21 continue
+      nh2=0.
+c                                  --- if(xh1.gt.0.999.or.t.gt.20000):
+c                                      hydrogen is highly ionized, no molecules
+      if(xh1.gt.0.999 .or. t.gt.20000.)go to 22
+c                                  --- (in the "bugged" version: if(xh.gt...)
+      fac=28.0925d0
+     *   -teta*(4.92516d0-teta*(0.056191d0+teta*0.0032688d0))-flgt
+      if(t.gt.12000.)fac=fac+(t-12000.)/1000.
+      b=10.0**fac/nhi
+      if(b.gt.1d-20) then                                         
+         c=b
+         bc=b/c/2.0
+         xx=1.0/(sqrt(bc*bc+1.0/c)+bc)
+            nh2=0.5*nhi*(1.0-xx)
+            nhi=nhi*xx
+            xh2=xx
+      else
+         nh2=0.5*nhi
+         nhi=0.
+      end if
+
+c                                  --- correct for a small electron degeneracy:
+   22 continue
+      nedgen = (nmetel+ne)*(1. + 2.19d7*(ro/fmue)/t/sqrt(t))
+
+c                                  --- calculation of energy and pressure:
+
+      ntot=nh-nh2+nhe+nedgen+nmet
+      pg=fkcnst*ntot*t
+      pr=arad/3.0*t**4
+      p=pg+pr
+      uh2=t*(2.1+t*2.5d-4)
+      if(t.gt.3000.)uh2=-1890.d0+t*(3.36d0+t*0.4d-4)
+c                                  --- the energy of hydrogen molecules has
+c                                      been calculated following Vardya (1960)
+      u=(1.5*pg + 3.*pr + fkcnst*nh2*uh2 +
+     *(eh2dys*nhi + (eh2dys+ehion)*nhii +
+     * eheion*nheii + (eheion+ehe2io)*nheiii)*evolt)/ro
+
+c                                  --- end of "energ"
+      end
+c
+c............................................................................
+c
+      subroutine fzz(f1,f2,f3,f4,f5,zz)
+      implicit double precision (a-h,o-z)
+c
+c subject:
+c     compute correction factor to the electron density,
+c     from numerical point of view: find root of a certain function
+c input:
+c     f1,f2,f3 = ionization factors for hydrogen, first and second ionization
+c                of helium, divided by electron density
+c     f4 = number density of hydrogen ions and atoms / electron number density
+c     f5 = ratio of helium to hydrogen nuclei (....ions+atoms)
+c output:
+c     zz = the iterated value of the correcting factor. The initial guess
+c          for this value is zz=1.0
+c method:
+c     secant iterations
+c..............................................................................
+c
+      zz=1.0
+      accfun=1.d-9
+      acczz =1.d-9
+      del=1.d-3
+      itmax=30
+c                                         --- first call of function
+      funa=f1/(f1+zz)+f5*f2*(zz+2*f3)/(zz*zz+f2*(zz+f3))-zz/f4
+
+      if (funa.lt.accfun) return
+c                                         --- Now iterations. Secant method.
+      do 1 iter=1,itmax
+         zz=zz+del
+         funb=funa
+         funa=f1/(f1+zz)+f5*f2*(zz+2*f3)/(zz*zz+f2*(zz+f3))-zz/f4
+         del=del*funa/(funb-funa)
+         if(abs(del).lt.acczz .or. abs(funa).lt.accfun) go to 2
+    1 continue
+c                                         --- Iterations not converged
+      stop ': file "eostate.s37" - subroutine "fzz" -
+     * Iterations do not converge'
+c                                         --- Iterations converged
+    2 zz=zz+del
+c                                         --- end of "fzz"
+      end
+c
+c......................................................................
+c        This file contains the following subroutines:
+c
+c    -  subroutine esac (xh,ztab,t6,r,iorder,irad)
+c    -  subroutine t6rinterp(slr,slt)
+c    -  subroutine readco
+c    -  subroutine radsub (t6,density,moles,tmass)
+c    -  function quad(ic,i,x,y1,y2,y3,x1,x2,x3)
+c    -  function gmass(x,z,amoles,eground,fracz,frac)
+c    -  block data
+c
+c    -  state
+c    -  termo
+c    -     termol  (LLNL EOS from llnl_env.s37)
+c    -     termos  (simple EOS from envelope.st3)
+c    -        energ
+c    -        fzz
+c                                              end of the file "eostate.s37"
+ceeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+ceeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+ceeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee

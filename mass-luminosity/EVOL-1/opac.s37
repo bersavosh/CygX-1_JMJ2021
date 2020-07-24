@@ -1,0 +1,406 @@
+cbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+c
+c  Begin of the file "OPAC.s37"                                 DATE: 26.11.95.
+c  Linear Interpolation of Alex.+ OPAL G93/21 opacities and derivatives.
+c  The names of subroutines correspond to .ST3 version of evolutionary program
+c  therefore this block can be used instead of OPAL_STD.ST3, for example.
+c
+c  Input files OPAC_7.DAT and OPAC_ENV.DAT are produced by program OPAC.for.
+c
+c !! Set values of parameters NR and NTT (numbers of points in logR and logT):
+c  the values are determined in OPAC.for depending from IGRID value: the tables
+c  OPAC_7.DAT and OPAC_ENV.DAT are IGRID-times finer than standard ones.
+c       IGRID = 1:     NR = 17,  NTT = 85
+c       IGRID = 2:     NR = 33,  NTT = 169
+c !! In the case of still finer tables (IGRID > 2) change reading formats
+c    according to OPAC.for.
+c
+c The grid in temperature and R=rho/T6**3 is as follows:
+c    log10(T)  =  3.0 (0.05/igrid) 6.0 (0.10/igrid) 8.1 (0.20/igrid) 8.7
+c    log10(R)  = -7.0 (0.50/igrid) 1.0
+c
+c  IMPORTANT: THE INPUT FILE NAMES ARE GIVEN EXPLICITLY IN THE PROGRAM:
+c     OPAC_7.DAT - tables of log10(Kappa), Kappa_rho and Kappa_T are merged
+c                  for X = 0.0, 0.10, 0.20, 0.35, 0.50, 0.70, 0.80.
+c     OPAC_ENV.DAT - log10(Kappa), Kappa_rho and Kappa_T for a fixed X 
+c                    in the envelope.
+c
+c        The following subroutines read and interpolate opacities.
+c
+c    subroutine:        subject:
+c    -----------        --------
+c
+c   - "opacit"   - calls the subroutine "OPACINT",
+c   - "opalo"    - reads and interpolates envelope opacities from the file
+c                  'OACP_ENV.DAT'.
+c   - "opact"    - calls the subroutine "OPALW"
+c   - "opalw"    - reads and interpolates interior opacities from the file
+c                  'OPAC_7.DAT' (for 7 values of X
+c                  (Newton quadratic interpolation in X is used).
+c..............................................................................
+c
+      subroutine OPACIT(RO,TE,x,z,KAPP,opr,opt)
+c -------------------------
+c   input:
+c       RO      density            [c.g.s.]
+c       TE      temperature        [K]
+c     x     - hydrogen content,    for comparison with opacity table header
+c     z     - heavy metal content, for comparison with opacity table header
+c   output:
+c       KAPP   opacity             [c.g.s.]
+c       opr = d ln(kappa) /d ln(ro)
+c       opt = d ln(kappa) /d ln(t)
+c---------------------------------------------------------------------------
+c
+      implicit real*8 (a-h,o-z)
+      implicit integer*4 (i-n)
+      real*8 KAPP
+c            
+      vol   = 1.d0/ro
+                       call opalo(te,vol,op,opr,opt)
+      kapp  = op
+      end
+c                                             end of OPACIT
+c.............................................................................
+C >>>>>>>>>>>>>>>>>    OPALO - subroutine for envelope    <<<<<<<<<<<<<<<<<<<<
+C
+C  INTERNAL WORKING VARIABLES ARE: 
+C                                  X  =  DLOG10(RHO/T6**3)
+C                                  Y  =  DLOG10(T)
+C                                  F  =  DLOG10(KAPPA)
+C  WHERE T6=T*10.D-6
+C
+C  INPUT :   TEMP  --  TEMPERATURE        
+C            VOL   --  1/DENSITY                     
+C
+C  OUTPUT :   OP    --  KAPPA
+C             OPR   --  dlog(kappa)/dlog(rho)
+C             OPT   --  dlog(kappa)/dlog(T)
+C >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+C
+        SUBROUTINE OPALO(TEMP,VOL,OP,OPR,OPT)
+        implicit real*8(a-h,o-z)
+c        parameter (ntt=85,nr=17)        ! for IGRID = 1 (standard grid)
+        parameter (ntt=169,nr=33)        ! for IGRID = 2 (2-time finer grid)
+        DIMENSION XX(nr),YY(ntt),FF(nr,ntt),ffr(nr,ntt),fft(nr,ntt)
+        common /comopalo/  XX,YY,FF,ffr,fft
+        save /comopalo/
+        save icontrol
+        DATA ICONTROL/0/
+C
+        IF(ICONTROL.NE.0)GO TO 1111
+        ICONTROL=1
+C
+C ================================================
+C ===============  INITIALISATION  ===============
+C ================================================
+C
+C ====
+C ====  READING THE TABLES IN
+C ====
+        ife = 23
+        open (unit=ife,status='old',file='opac_env.dat')
+        rewind (ife)
+        do iop = 1, 3
+           read (ife,*)
+           read (ife,100) zchem, xxx
+  100      format(5x,d15.6,13x,d15.6)
+           read (ife,*)
+           read (ife,*)
+           read (ife,*)
+           read (ife,*)
+           read (ife,101) (xx(j), j = 1, nr)
+  101      format(12x,33f7.3)
+           read (ife,*)
+           do i = 1, ntt
+              if (iop.eq.1) read (ife,*) yy(i), (ff(j,i), j=1,nr)
+              if (iop.eq.2) read (ife,*) yy(i), (ffr(j,i), j=1,nr)
+              if (iop.eq.3) read (ife,*) yy(i), (fft(j,i), j=1,nr)
+           enddo
+        enddo
+        close (ife)
+c
+ 1111   CONTINUE
+C
+C  ================================================
+C  ===============  INTERPOLATION  ================
+C  ================================================
+C
+        T=TEMP
+        V=VOL
+C
+        X   = 18.D0-DLOG10(V*T**3)
+        Y   = DLOG10(T)
+C
+C ====
+C ====  OUT OF RANGE ALARMS
+C ====
+C
+        IF(X.LT.XX(1))WRITE(*,201)X,Y
+        IF(X.LT.XX(1))STOP
+ 201    FORMAT(' Envelope: R is too small: lg R, lg T = ', 1p2e10.2)
+C
+        IF(X.GT.XX(nr))WRITE(*,200)X,Y
+        IF(X.GT.XX(nr)) X=XX(nr)
+ 200    FORMAT(' Envel.extrap.: R too large: lg R, lg T = ', 1p2e10.2)
+C
+        IF(Y.LT.YY(1))WRITE(*,203)X,Y
+        IF(Y.LT.YY(1))STOP
+ 203    FORMAT(' Envelope: T is too small: lg R, lg T = ', 1p2e10.2)
+C
+        IF(Y.GT.YY(ntt))WRITE(*,202)X,Y
+        IF(Y.GT.YY(ntt))STOP
+ 202    FORMAT(' Envelope: T is too large: lg R, lg T = ', 1p2e10.2)
+c
+c ====  localisation within the table
+c
+      do j = 1, nr
+         if (x.le.xx(j)) go to 301
+      enddo
+  301 jj = j - 1
+c
+      do i = 1, ntt
+         if (y.le.yy(i)) go to 302
+      enddo
+  302 ii = i - 1
+c
+      ax  = (x-xx(jj)) / (xx(jj+1)-xx(jj))
+      ay  = (y-yy(ii)) / (yy(ii+1)-yy(ii))
+c
+c ====  log(Kappa) interpolation 
+c
+      bb = ff(jj,ii+1) - ff(jj,ii)
+      cc = ff(jj+1,ii+1) - ff(jj+1,ii) - bb
+      dd = ay * cc + ff(jj+1,ii) - ff(jj,ii)
+      f  = ax * dd + ay * bb + ff(jj,ii)
+c
+c ====  Kappa_rho interpolation
+c
+      bb = ffr(jj,ii+1) - ffr(jj,ii)
+      cc = ffr(jj+1,ii+1) - ffr(jj+1,ii)-bb
+      dd = ay * cc + ffr(jj+1,ii) - ffr(jj,ii)
+      fr = ax * dd + ay * bb + ffr(jj,ii)
+c
+c ====  Kappa_T interpolation
+c
+      bb = fft(jj,ii+1) - fft(jj,ii)
+      cc = fft(jj+1,ii+1) - fft(jj+1,ii)-bb
+      dd = ay * cc + fft(jj+1,ii) - fft(jj,ii)
+      ft = ax * dd + ay * bb +  fft(jj,ii)
+c
+      op  = 10.d0 ** f
+      opr = fr
+      opt = ft
+c
+      return
+      end
+c                                                  end of OPALO
+C ----------------------------------------------------------------------
+      subroutine opact(rh,t,xvec,fkap,opr,opt)
+      implicit double precision (a-h,o-z)
+      include 'data.s37'
+      dimension xvec(nx)
+c
+c subiect:
+c     calculate opacity from tables
+c input:
+c     rh  = density                                 [g/cm**3]
+c     t   = temperature                             [K]
+c     xvec= vector of chemical content: xvec(1) = hydrogen (by mass) etc.
+c output:
+c     fkap = opacity                                [cm**2/g]
+c     opr = d ln(kappa) /d ln(ro)
+c     opt = d ln(kappa) /d ln(t)
+c..............................................................................
+      xchem = xvec(1)
+      vol   = 1.d0/rh
+                       call opalw(t,vol,xchem,op,opr,opt)
+      fkap  = op
+      end
+C                                                    end of OPACT
+C ----------------------------------------------------------------------
+C >>>>>>>>>>>>>>>    OPALW - subroutine for interiors    <<<<<<<<<<<<<<<<<<<<
+C
+C  INTERNAL WORKING VARIABLES ARE: 
+C                                  X  =  DLOG10(RHO/T6**3)
+C                                  Y  =  DLOG10(T)
+C                                  F  =  DLOG10(KAPPA)
+C  WHERE T6=T*10.D-6
+C
+C  INPUT :   TEMP  --  TEMPERATURE        
+C            VOL   --  1/DENSITY                     
+C
+C  OUTPUT :   OP    --  KAPPA
+C             OPR   --  dlog(kappa)/dlog(rho)
+C             OPT   --  dlog(kappa)/dlog(T)
+C >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+C
+      SUBROUTINE OPALW(TEMP,VOL,xchem,OP,OPR,OPT)
+C
+      IMPLICIT REAL*8(A-H,O-Z)
+      parameter (nxtab=7)
+c      parameter (ntt=85,nr=17)        ! for IGRID = 1 (standard grid)
+      parameter (ntt=169,nr=33)        ! for IGRID = 2 (2-time finer grid)
+C
+      DIMENSION xtab(nxtab), XX(nr), YY(ntt), ffn(nxtab,nr,ntt),
+     #            ffrn(nxtab,nr,ntt), fftn(nxtab,nr,ntt)
+      dimension opn(nxtab), optn(nxtab), oprn(nxtab)
+      common /comopalw/  XX,YY,ffn,ffrn,fftn
+      save icontrol
+      save /comopalw/
+      data xtab /0.0d0, 0.1d0, 0.2d0, 0.35d0, 0.5d0, 0.7d0, 0.8d0/
+C
+      DATA ICONTROL/0/
+C
+      IF(ICONTROL.NE.0)GO TO 1111
+      ICONTROL=1
+C
+C ====
+C ====  READING THE TABLES IN
+C ====
+      ifi = 51
+      open (unit=ifi,file='opac_7.dat',status='old')
+      rewind (ifi)
+c
+      do iop = 1, 3
+         do k=1,nxtab
+            read (ifi,*)
+            read (ifi,100) zchem, xxx
+  100       format(5x,d15.6,13x,d15.6)
+            read (ifi,*)
+            read (ifi,*)
+            read (ifi,*)
+            read (ifi,*)
+            read (ifi,101) (xx(j), j = 1, nr)
+  101       format(12x,33f7.3)
+            read (ifi,*)
+            do i = 1, ntt
+               if (iop.eq.1) read (ifi,*) yy(i), (ffn(k,j,i), j=1,nr)
+               if (iop.eq.2) read (ifi,*) yy(i), (ffrn(k,j,i), j=1,nr)
+               if (iop.eq.3) read (ifi,*) yy(i), (fftn(k,j,i), j=1,nr)
+            enddo
+         enddo
+      enddo
+      close (ifi)    
+c ------------------------------------------------------
+ 1111   CONTINUE
+C
+        T=TEMP
+        V=VOL
+C
+        X=18.D0-DLOG10(V*T**3)
+        Y=DLOG10(T)
+C
+C ====  OUT OF RANGE ALARMS
+C
+        IF(X.LT.XX(1))WRITE(*,199)X,Y
+        IF(X.LT.XX(1))STOP
+ 199    FORMAT(' interior: R is too small: lg R, lg T = ', 1p2e10.2)
+C
+        IF(X.GT.XX(nr))WRITE(*,200)X,Y
+        IF(X.GT.XX(nr))STOP
+ 200    FORMAT(' interior: R is too large: lg R, lg T = ', 1p2e10.2)
+C
+        IF(Y.LT.YY(1))WRITE(*,201)X,Y
+        IF(Y.LT.YY(1))STOP
+ 201    FORMAT(' interior: T is too small: lg R, lg T = ', 1p2e10.2)
+C
+        IF(Y.GT.YY(ntt))WRITE(*,202)X,Y
+        IF(Y.GT.YY(ntt))STOP
+ 202    FORMAT(' interior: T is too large: lg R, lg T = ', 1p2e10.2)
+c
+c ----------------------------------- localisation within the (rho,T)-table
+c
+      do j = 1, nr
+         if (x.le.xx(j)) go to 301
+      enddo
+  301 jj = j - 1
+c
+      do i = 1, ntt
+         if (y.le.yy(i)) go to 302
+      enddo
+  302 ii = i - 1
+c
+c ------------------------------------ localisation within the X table 
+c
+      nxtab1 = nxtab - 1
+      do k = 1, nxtab1
+         if (xchem.ge.xtab(k).and.xchem.le.xtab(k+1)) go to 303
+      enddo
+      if(abs(xchem-xtab(nxtab)).gt.1.0d-7)   stop ' X out of range'
+      k = nxtab1
+c
+  303 kcen = k
+      if (xchem-xtab(k).gt.xtab(k+1)-x) kcen = kcen + 1
+      if (kcen.lt.2)                    kcen = 2
+      if (kcen.gt.nxtab1)               kcen = nxtab1
+      kk   = kcen
+c -------------------------------------------------------------------------
+      ax  = (x-xx(jj)) / (xx(jj+1)-xx(jj))
+      ay  = (y-yy(ii)) / (yy(ii+1)-yy(ii))
+c
+      do 2222 k = kk-1, kk+1
+c
+c ====  log(Kappa) interpolation 
+c
+         bb = ffn(k,jj,ii+1) - ffn(k,jj,ii)
+         cc = ffn(k,jj+1,ii+1) - ffn(k,jj+1,ii) - bb
+         dd = ay * cc + ffn(k,jj+1,ii) - ffn(k,jj,ii)
+         f  = ax * dd + ay * bb + ffn(k,jj,ii)
+c
+c ====  Kappa_rho interpolation
+c
+         bb = ffrn(k,jj,ii+1) - ffrn(k,jj,ii)
+         cc = ffrn(k,jj+1,ii+1) - ffrn(k,jj+1,ii)-bb
+         dd = ay * cc + ffrn(k,jj+1,ii) - ffrn(k,jj,ii)
+         fr = ax * dd + ay * bb + ffrn(k,jj,ii)
+c
+c ====  Kappa_T interpolation
+c
+         bb = fftn(k,jj,ii+1) - fftn(k,jj,ii)
+         cc = fftn(k,jj+1,ii+1) - fftn(k,jj+1,ii)-bb
+         dd = ay * cc + fftn(k,jj+1,ii) - fftn(k,jj,ii)
+         ft = ax * dd + ay * bb +  fftn(k,jj,ii)
+c
+         opn(k)  = 10.d0 ** f
+         oprn(k) = fr
+         optn(k) = ft
+c
+ 2222 continue
+c
+c ------------------------------------ Newton quadratic interpolation in X
+c
+      xx0   = xchem       - xtab(kk-1)
+      xx1   = xchem       - xtab(kk)
+      x10   = xtab(kk)    - xtab(kk-1)
+      x21   = xtab(kk+1)  - xtab(kk)
+      x20   = xtab(kk+1)  - xtab(kk-1)
+c
+      d10  = (opn(kk)    -  opn(kk-1)) / x10
+      d21  = (opn(kk+1)  -  opn(kk)) / x21
+      d210 = (d21        -    d10) / x20
+      op   = opn(kk-1)   + xx0 * (d10  + xx1 * d210)
+c      
+      d10  = (oprn(kk)    -  oprn(kk-1)) / x10
+      d21  = (oprn(kk+1)  -  oprn(kk)) / x21
+      d210 = (d21         -    d10) / x20
+      opr  = oprn(kk-1)   + xx0 * (d10  + xx1 * d210)
+c      
+      d10  = (optn(kk)    -  optn(kk-1)) / x10
+      d21  = (optn(kk+1)  -  optn(kk)) / x21
+      d210 = (d21         -    d10) / x20
+      opt  = optn(kk-1)   + xx0 * (d10  + xx1 * d210)
+c      
+        return
+        end
+c                                                  end of OPALW
+C ----------------------------------------------------------------------
+C ----------------------------------------------------------------------
+c        This file contains subroutines :
+c
+c     -   "opacit"            -
+c     -   "opacint"           -
+c     -   "opact"             -
+c     -   "opalw"             -
+c                                            end of the file "opac.04"
+ceeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee

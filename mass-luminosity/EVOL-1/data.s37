@@ -1,0 +1,195 @@
+cbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+cbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+cbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+c
+c  Begin of the file "data.s37"                       date: January 31, 1994
+c
+c   this file is included by most of the subroutines and provides them with 
+c   physical and astronomical constants and actual values of model parameters.
+c   Most of the constants are taken from "Physics Today", August 1990.
+c   This file contains: (1) parameter lines
+c                       (2) common /heninc/
+c.............................................................................
+      parameter( sunm=1.9891d33,        sunr=6.960d10,     sunl=3.86d33)
+      parameter( sunt=5783.0d0,         sunmbo=4.74d0                  )
+      parameter( clight=2.99792458d10,  gconst=6.6726d-8               )
+      parameter( arad=7.5659d-15,       sigcst=arad*clight/4.0         )
+      parameter( hplanc=6.626076d-27,   fkcnst=1.38066d-16             )
+      parameter( amu=1.660540d-24,      ahyd=1.0078250d0               )
+      parameter( ahe3=3.016030d0,       ahe4=4.0026033d0,    an14=14.d0)
+      parameter( ao16=16.d0,      elmass=9.109390d-28,   fku=fkcnst/amu)
+      parameter( year=3.1556926d7,      evolt=1.6021773d-12            )
+      parameter( fln10=2.302585093d0,   pi=3.141592654d0               )
+      parameter( eh2dys=2.2386d0,       ehion=13.598d0                 )
+      parameter( eheion=24.587d0,       ehe2io=54.416d0                )
+c
+      parameter( nt=1500, mm=5, nx=7, m2=mm+nx                         )
+c
+c dla szybkich przegladow facst=1.5, facss=facacc=1.0
+c
+      parameter( st1=0.06,  st2=0.02,  st3=0.02,  st4=0.05,  st5=1.0   )
+      parameter( st6=0.02,  st7=0.02,  st8=0.02,  st9=0.05,  st10=.05  )
+      parameter( st11=.05,  st12=.05,  facst=0.25                      )
+c
+      parameter( ss1=0.06,  ss2=0.02,  ss3=0.02,  ss4=0.05,  ss5=0.2   )
+      parameter( nss=5,     facss=0.25                                 )
+c
+      parameter( accen1=0.06,  accen2=0.02,  accen3=0.02,  accen4=1.   )
+      parameter( accen5=0.1,   facacc=0.25                             )
+c
+      parameter( fmenv=0.05d0, alfa=1.0d0, tauf=0.666666667d0          )
+      parameter( roslg=-12.00, fmcen=3d-8, fmf=0.3d0                   )
+
+      parameter( endhra=1.d-6,  endhco=1.d-6,     zavrge=8.0d0         )
+      parameter( tenuc=1.6d6                                           )
+      parameter( pric12=0.173285d0,prin14=0.053152d0,prio16=0.482273d0 )
+c
+c --- New overshooting:
+c --- begin 
+c     X = Xc + (q-qc)^wykla*(a+b*(q-qc))
+c       a = [(Xov-Xc)*(wykla+1)-d(Xov)/dq*Q]/Q^wykla
+c       b = [-(Xov-XC)*wykla+d(Xov)/dq*Q]/Q^(wykla+1)
+c       Q = qov-qc
+c       qov,Xov,d(Xov)/dq are obtained from input parameter alfaov=dover/Hp
+c       wykla > 1+epsilon
+c
+      parameter( alfaov=0.0d0, wykla=1.0d0                             )
+c
+c       NO overshooting: alfaov=0.0d0, wykla=1.0d0
+c --- end
+c
+      common /heninc/ time, dtime, flunit, fmtot, rsurf, zed, zp,
+     *                com(20), icom(20), model, iterat, mp(20)
+c............................................................................
+
+c COMMENTS
+
+c astronomical constants:
+
+c     sunm    = Solar mass                             [g]
+c     sunr    = Solar radius                           [cm]
+c     sunl    = Solar luminosity                       [erg/s]
+c     year    = astronomical year                      [s]
+
+c physical constants:
+
+c     clight  = light speed                            [cm/s]
+c     gconst  = gravitational constant                 [c.g.s.]
+c     arad    = radiation constant (rad. pressure = 1/3*arad*T**4)
+c     sigcst  = Stefan-Boltzmann constant (black body rad. flux = sigcst*T**4)
+c     hplanc  = Planck constant                        [c.g.s.]
+c     fkcnst  = Boltzmann constant                     [c.g.s.]
+c     amu     = atomic mass unit  (a.m.u.)             [g]
+c     ahyd    = hydrogen atomic mass                   [a.m.u.]
+c     ahe4    = helium-4 atomic mass                   [a.m.u.]
+c     elmass  = electron mass                          [g]
+c     evolt   = electron charge * 1 Volt = energy unit [c.g.s.]
+
+c ionization and dissociation energy:
+
+c     eh2dys  = hydrogen molecule dissociation energy / 2  [eV]
+c     ehion   = hydrogen ionization energy                 [eV]
+c     eheion  = helium first ionization energy             [eV]
+c     ehe2io  = helium second ionization energy            [eV]
+
+c dimensions of tables:
+
+c     nt      = maximum number of mass points in the Henyey scheme, including
+c               two extra points to store boundary values. Referenced in many
+c               places, always in connexion with the tables "hx" and "dh"
+c               declared in common /hen/ with "nt" as the 2-nd dimension.
+c               If you need more mass points,you should increase the "nt" value.
+c     mm      = number of functions integrated, including independent one.
+c               In our standard Henyey scheme mm=5. Referenced in many places.
+c               Warning: in some places of the current version of the code,
+c               values "5" and "4" are used directly, instead of "mm" and
+c               " mm-1", respectively. Changing this number,one has to remember
+c               about some necessary logical-structure changes within the code
+c               (e.g., in the Henyey scheme in the subroutine "hsolve").
+c     nx      = number of chemical elements included.
+c               This is used very consequently within the code. If you want
+c               to follow evolution of more elements, you have to increase
+c               the "nx" value and to improve the nuclear reaction network.
+c     m2=mm+nx= first dimension of the tables "hx" and "dh", declared in
+c               common /hen/. Referenced in many places through the program.
+
+c limits for time and space steps:
+
+c     st1..st8= multiplied by "facst" become upper limits for time step
+c               corrections to the main variables and chemical abundances.
+c               "st5" is not used within the program.
+c     facst   = multiplicator to the "st1..st8" (these are weights, in fact).
+
+c     ss1..ss5= multiplied by "facss" become upper limits for space step in all
+c               variables. Used both in the Henyey and Schwarzschild schemes.
+c     facss   = multiplicator to the "ss1..ss5" (these are weights, in fact).
+c     nss     = dimension of a table that will store "ss1..ss5*facss" values.
+
+c     accen1..accen5 = multiplied by "facacc" become upper limits for space
+c               step in the envelope integrations. Used in the subroutine "env".
+c     facacc  = multiplicator to the "accen1..accen5" (these are weights,
+c                                                                     in fact).
+c     fmenv   = fraction of mass in the outer envelope (few percent usually)
+c     alfa    = mixing length theory parameter; Here alfa=1.0 adopted.
+c     tauf    = optical depth of effective surface; Here tauf=2/3 adopted.
+c     roslg   = log10 (density at a stellar surface)         [g/cm**3]
+c     fmcen   = mass of the central sphere / total stellar mass
+c     fmf     = mass at the fitting point  / total stellar mass
+
+c other parameters:
+
+c     endhra  = value of the hydrogen content below which it is assumed to be 0       
+c                                                      (radiative region).
+c     endhco  = value of the hydrogen content below which it is assumed to be 0       
+c                                                      (convective core ).
+c     zavrge  = average charge of metals.
+c     pric12 * zed        = primordial C12 content
+c     prin14 * zed        = primordial N14 content
+c     prio16 * zed        = primordial O16 content
+
+c common /heninc/ - simple variables:
+
+c     time    = time                    [s]
+c     dtime   = time step               [s]
+c     flunit  = luminosity unit         [erg/s]
+c     fmtot   = total stellar mass      [g]
+c     zed     = metals content (by weight), usually named "Z".
+c                      For the first time read in "setsch", file "s04.f".
+c     zp        zp * density / amu = total # of CNO nuclei.
+c                                      Defined in "setsch", file "s04.f".
+c     model   = sequential model number
+
+c common /heninc/ - tables:
+
+c     These are tables for communication among subroutines.
+c     The subroutines "setsch" (program "s37") and "readh" (program "h37")
+c     initiate values of the tables "com" and "icom" as 0.
+c     com     = the table to transfer real data.
+c     icom    = the table to transfer integer data.
+
+c Warning:
+c there are some input values introduced directly in other parts of the codes:
+c ----------------------------------------------------------------------------
+
+c     difacc = the maximum difference allowed at the fitting point
+c     itmax  = the maximum number of iterations in the Schwarzschild scheme
+
+c     acc      in a converged model, the largest discrepancy 
+c              in the difference equations and the largest correction "dx"
+c              (both in units of mass zone sizes, "ss")
+c              should be less than "acc".
+c     iterm  = the maximum number of iterations in the Henyey scheme
+
+
+c     variable         value           file            subroutine
+c     -------------------------------------------------------------
+c      difacc           1d-8         "s37.for"           "sch"
+c      itmax             15          "s37.for"           "sch"
+
+c      acc             1.0d-8        "h37.for"         main program
+c      iterm            20           "h37.for"         main program
+c.............................................................................
+c                                                   end of the file "data.s37"
+ceeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+ceeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+ceeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee

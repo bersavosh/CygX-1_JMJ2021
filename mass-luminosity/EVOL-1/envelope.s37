@@ -1,0 +1,582 @@
+cbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+cbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+cbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+c  Begin of the file "envelope.s37 "                        date: 4.10.95,
+c  (former name: "llnl_env.s37")                     the same as 16.02.95;
+c                                                       modified: 3.11.95,
+c                                                                20.10.96,
+c
+c  MODIFICATION 3.11.95: 
+c      Taking into account Double Precision version of EOS: 
+c                               use following declaration in subroutine TERMO:
+c    real*8 ro1,t61,x1,y1,ztab1,esact,eos(4)  ! for Double Precision version
+c
+c  MODIFICATION 20.10.96: 
+c      Move subroutine TERMO to the block EOSTATE.S37 and modify there
+c                              (this subroutine is named TERMOL there)
+c -------------------------------------------------
+c        The following subroutines calculate an envelope model and provide
+c        the programs "s37" and "h37" with values of all variables
+c        at the bottom of the envelope. These values are used to prepare 
+c        the outer boundary conditions.
+c        This block is very similar to the "GOB" program. It calculates 
+c        structure of outer envelopes with partial ionization of hydrogen and
+c        helium and it treats convection according to "mixing length theory";
+c    TO BE COMPARED WITH A PAPER BY B. PACZYNSKI, 1969, ACTA ASTR., VOL. 19, 1.
+c
+c        This file contains ...
+c    subroutine:        subject:
+c    -----------        --------
+c
+c   - "env"    -    integration of envelope structure equations
+c                     SUBROUTINE CALLED:
+c                     - "gobstp" -
+c   - "gobstp" -    to perform single step of integrations
+c                     SUBROUTINE CALLED:
+c                     - "rhsgob" -
+c   - "rhsgob" -    to calculate right hand sides of stellar structure eqs.
+c                     SUBROUTINES CALLED:
+c                     - "termo"  -  (included - file "eostate.s37")
+c                     - "opacit" -  (included - file "opacity.s37")
+c                     - "cubic"  -
+c   - "gobout"  -     to write data for "osc" program
+c                     SUBROUTINES CALLED:
+c                     - "rhsgob"  -
+c   auxiliary subroutines:
+c   - "cubic"  -
+c..............................................................................
+c
+      subroutine env(telg,fllg,starms,xvec,reslts,iout,iprint)
+      implicit double precision (a-h, o-z)
+      include 'data.s37'
+      dimension xvec(nx),reslts(20)
+      common /gobcom/ starm, starlu, starra, x, y, fcoro,
+     *                fcon1, fcon2, fcon3, fcon4, fcon5, ermax, ionful
+c
+c subject:
+c           integration of envelope structure equations
+c input:
+c     telg    = log10(surface temperature)                      [K]
+c     fllg    = log10(surface luminosity)                       [L Sun]
+c     starms  = total stellar mass                              [M Sun]
+c     xvec    = vector of chemical content: xvec(1) = hydrogen (by mass) etc.
+c     iout    = logical unit number for GOBOUT subroutine
+c     iprint  = print flag
+c output:
+c     reslts(1)  = log10(density) at the base of the envelope       [g/cm**3]
+c     reslts(2)  = log10(temperature) at the base of the envelope   [K]
+c     reslts(3)  = log10(radius) at the base of the envelope        [cm]
+c     reslts(4)  = luminosity / luminosity unit
+c     reslts(5)  = fractional mass at the base of the envelope
+c     reslts(6)  = starms   (see input)
+c     reslts(7)  = telg (log10(surface temperature))                [K]
+c     reslts(8)  = log10(effective temperature,computed at tauf)    [K]
+c     reslts(9)  = fllg     (see input)
+c     reslts(10) = log10(surface radius)                            [cm]
+c     reslts(11) = maximum error found from thermodynamic identity
+c     reslts(12) = log10(effective radius,computed at tauf)         [cm]
+c     reslts(13) = moment of inertia                             [c.g.s]
+c parameters taken from the file 'data.s37':
+c     sunl, sunr, sigcst, arad, clight, gconst, pi, fln10
+c subroutines used:
+c     gobstp
+c     rhsgob
+c     cubic
+c     termo
+c     energ
+c     fzz
+c     opacit
+c     gobout
+c variables of /gobcom/
+c     starm  = total stellar mass                         [g]
+c     starlu = star luminosity                            [erg/s]
+c     starra = star radius                                [cm]
+c     x      = hydrogen content                           [by mass fraction]
+c     y      = helium content                             [by mass fraction]
+c     fcon1, fcon2, fcon3, fcon4, fcon5 = constants for right hand sides
+c     ermax  = maximum error obtained from thermodynamic identity
+c     ionful = control variable managed by the subroutine "rhsgob":
+c            = 1  - full matter ionization assumed
+c            = 0  - ionization state to be computed (at start ionful=0)
+c functions integrated (fm = fraction of mass below the actual sphere):
+c     1. d log10(density [g/cm**3]) / d fm
+c     2.   d log10(temperature [K]) / d fm
+c     3.       d log10(radius [cm]) / d fm
+c     4.            d optical depth / d fm
+c     5.                 d (1 - fm) / d fm
+c
+c  TO BE COMPARED WITH A PAPER BY B. PACZYNSKI, 1969, ACTA ASTR., VOL. 19, 1.
+c..............................................................................
+c
+      parameter (neqs=6)
+      dimension xx(neqs), acc(neqs), xxspec(neqs), xxintp(neqs)
+      parameter (ntm=3000)
+      dimension puls(13), pulsenv(13,ntm)
+      common /envcom/ puls 
+      common /envarp/ pulsenv, nenv 
+
+c                                 --- set local values
+c                                     (relg - surface radius, cm)
+      relg = (fllg+log10(sunl/8.d0/pi/sigcst))/2.d0-2.d0*telg
+
+c                                 --- set values in /gobcom/
+      starm  = starms*sunm
+      starlu = 10.0**fllg*sunl
+      starra = 10.0**relg
+      x      = xvec(1)
+      y      = xvec(3)
+c --------------------------------------------------- ROTATION
+      fcoro=2.0d0/3.0d0*com(13)**2/gconst/starm         ! incl. into /gobcom/
+c ---------------------------------------------------
+      fcon1  = starlu/starm/(16.*pi*clight*gconst)
+      fcon2  = gconst/4/pi*starm**2/fln10
+      fcon3  = starm/4/pi/fln10
+      fcon4  = arad*2/3/gconst*sqrt(sqrt(starlu/8/pi/sigcst))/starm
+      fcon5  = gconst*starm
+      ionful = 0
+      ermax  = 0.
+c                                 --- set limits for step size in all functions
+c                                      basing on 'data.s37' accen1, accen2,...
+c                                      multiplied by facacc
+      acc(1)=accen1*facacc
+      acc(2)=accen2*facacc
+      acc(3)=accen3*facacc
+      acc(4)=accen4*facacc
+      acc(5)=accen5*facacc
+c                                 --- set limits for functions integrated
+      xxspec(1)=3.0
+      xxspec(2)=8.2d0
+      xxspec(3)=8.0
+      xxspec(4)=tauf
+      xxspec(5)=fmenv
+c                                 --- set starting vector of funct. integrated
+      xx(1)=roslg                   
+      xx(2)=telg
+c
+c  For using OPAL or OP opacities we need lg(R)=lg(Rho)-3*lg(T6) >= -7.0.
+c  Adjust minimal lg(Rho) to fulfill this condition :
+c
+      rstart=xx(1)-3.0d0*xx(2)+18.0d0
+      if (rstart.lt.(-7.0d0)) 
+     *   xx(1)=3.0d0*xx(2)-25.0d0+0.001d0
+c
+c (This adjustment will be done only for hottest stars with lg(Tsur)>4.4.)
+c
+      xx(3)=relg
+      xx(4)=0.
+      xx(5)=0.
+      xx(6)=0.
+c                                 --- now integrations
+      nstpmx=2000
+      nstp=0
+      ispec=0
+    1 nstp=nstp+1
+c                                 --- write data for osc. program
+
+      if (ispec.eq.0) call gobout(xx,iout,iprint)
+      do i=1,13
+         pulsenv(i,nstp)=puls(i)
+      enddo
+c                                --- ispec.ne.0 tells which function integrated
+c                                    has reached the special limit xspec(ispec)
+
+      call gobstp(xx,acc,xxspec,xxintp,ispec)
+
+      if (ispec.eq.5) call gobout(xxintp,iout,iprint)
+c
+c                                --- nenv = number of layers in the envelope
+      nenv=nstp+1
+      do i=1,13
+         pulsenv(i,nstp+1)=puls(i)
+      enddo
+
+c                                 --- find effective temperature, i.e
+c                                     temperature at the optical depth = tauf
+      if (ispec.eq.4) then
+          tefflg=xxintp(2)
+          refflg=xxintp(3)
+          ispec=0
+      end if
+c                                 --- loop
+      if (ispec.eq.0) go to 1
+
+c                                 --- emergency exits
+
+      if (ispec.eq.1) write(*,*)
+     *        'env: wrong end of integrations, density too large'
+      if (ispec.eq.2) write(*,*)
+     *        'env: wrong end of integrations, temperature too large'
+      if (ispec.eq.3) write(*,*)
+     *        'env: wrong end of integrations, radius too small'
+      if (nstp.ge.nstpmx) write(*,*)
+     *        'env: too many steps'
+      if (ispec.ne.5 .or. nstp.ge.nstpmx) stop ': file "envelope.s37"
+     * - subroutine "env" -' 
+
+c                                 --- integrations finished successfully
+
+c                                 --- set the output vector
+      reslts(1) = xxintp(1)
+      reslts(2) = xxintp(2)
+      reslts(3) = xxintp(3)
+      reslts(4) = starlu/flunit
+      reslts(5) = 1.0-xxintp(5)
+      reslts(6) = starms
+      reslts(7) = telg
+      reslts(8) = tefflg
+      reslts(9) = fllg
+      reslts(10)= relg
+      reslts(11)= ermax
+      reslts(12)= refflg
+      reslts(13)= xxintp(6)*starm
+c                                 --- end of "env"
+      end
+c
+c..............................................................................
+c
+      subroutine gobstp(xx,acc,xxspec,xxintp,ispec)
+      implicit double precision (a-h,o-z)
+      parameter (neqs=6, nres=20)
+      dimension xx(neqs), acc(neqs), xxspec(neqs), xxintp(neqs)
+c
+c subject:
+c     perform single step of integrations
+c input:
+c     xx     = vector of functions integrated; independent variable among them
+c     acc    = vector of limits on step size
+c     xxspec = vector of special values of integrated functions.
+c              When a function meets corresponding xxspec value then linear
+c              interpolation performed to match this value exactly
+c              and results stored in the xxintp vector.
+c output:
+c     xx     = vector of functions at the end of step
+c     xxintp = regularly not modified. When linear interpolation is performed
+c              then results of interpolation are stored in xxintp
+c     ispec  = regularly set to 0
+c              When linear interpolation performed due to function number i
+c              then ispec=i
+c subroutines called:
+c     rhsgob(xx,yy,res), where:
+c     xx    = input vector
+c     yy    = output vector, right han sides of stellar structure equations
+c     res   = output vector, some additional values, not used here
+c method:
+c     Runge-Kutta second order.
+c     Step size evaluation: changes (absolute) of integrated functions
+c     below limits given in acc vector.
+c..............................................................................
+c
+      dimension yy(neqs), xs(neqs), xxold(neqs), res(nres)
+
+c                                 --- saving the old values
+      do 1 i=1,neqs
+      xxold(i) = xx(i)
+    1 continue
+c                                 --- right hand sides at the beginning of step
+      call rhsgob(xx,yy,res)
+c                                 --- step size evaluation.
+c                                 --- Equation no 4 (optical depth integration)
+c                                     does not affect the step size.
+      h=0.
+      do 2 i=1,neqs-1
+         hh=abs(yy(i)/acc(i))
+         if (hh.gt.h .and. i.ne.4) h=hh
+    2 continue
+      h=-1./h
+c                                 --- extrap. for the half of step
+      do 3 i=1,neqs
+      xs(i)=xx(i)+0.5*h*yy(i)
+    3 continue
+c                                 --- right hand sides in the middle of step
+      call rhsgob(xs,yy,res)
+c                                 --- values at the end of step
+      do 4 i=1,neqs
+      xx(i)=xx(i)+h*yy(i)
+    4 continue
+c                                 --- checking special conditions
+      ispec=0
+      do 5 i=1,neqs-1
+      if ((xxspec(i)-xxold(i))*(xxspec(i)-xx(i)).le.0.) ispec=i
+    5 continue
+      if (ispec.eq.0) return
+c
+c                                 --- interpolation if special conditions found
+c
+      fac=(xxspec(ispec)-xxold(ispec))/(xx(ispec)-xxold(ispec))
+      do 6 i=1,neqs
+      xxintp(i)=(1.-fac)*xxold(i) + fac*xx(i)
+    6 continue
+c                                 --- end of "gobstp"
+      end
+c
+c...........................................................................
+c
+      subroutine rhsgob(xx,yy,res)
+      implicit double precision (a-h,o-z)
+      include 'data.s37'
+      parameter (neqs=6,nres=20)
+      dimension xx(neqs),yy(neqs),res(nres)
+      common /gobcom/ starm, starlu, starra, x, y, fcoro,
+     *                fcon1, fcon2, fcon3, fcon4, fcon5, ermax, ionful
+c
+c subject:
+c     calculate right hand sides of stellar structure equations
+c     within the envelope
+c input:
+c     xx(1)  = log10 (density)                       [g/cm**3]
+c     xx(2)  = log10 (temperature)                   [K]
+c     xx(3)  = log10 (radius)                        [cm]
+c     xx(4)  = optical depth
+c     xx(5)  = envelope mass / star mass (xx(5) = 0 at the surface,
+c                                         xx(5) = 1 at the center)
+c             This fractional mass is an independent variable.
+c     xx(6)  = cumulative moment of inertia
+c output:
+c     yy     = vector of right hand sides of the equations,
+c              containing derivatives of "xx" over fractional mass.
+c     res    = vector of some additional values.
+c     res(1)..res(14) computed in the subroutine "termo",see description there.
+c     res(16)= opt = d ln(kappa) /d ln(t)
+c     res(17)= opr = d ln(kappa) /d ln(ro)
+c     res(18)= dpm   = d log10(p) / d (mass fraction)
+c     res(19)= radiative temperature gradient.
+c     res(20)= temp. gradient computed according to the "mixing length theory".
+c variables of /gobcom/:
+c     starm  = total stellar mass                    [g]
+c     starlu = star luminosity                       [erg/s]
+c     starra = star radius [cm]
+c     x      = hydrogen content                      [by mass fraction]
+c     y      = helium content                        [by mass fraction]
+c     fcon1, fcon2, fcon3, fcon4, fcon5 = constants for right hand sides.
+c     ermax  = maximum error obtained from thermodynamic identity.
+c     ionful = control variable: = 1  - full matter ionization assumed,
+c                                = 0  - ionization state to be computed.
+c parameters taken from the file 'data.s37':
+c     pi
+c local parameter
+c     neqs   = number of equations integrated. In the minimum case neqs=5.
+c..............................................................................
+
+      ro  = 10.0**xx(1)
+      t   = 10.0**xx(2)
+      r   = 10.0**xx(3)
+      tau = xx(4)
+      fm  = 1.0-xx(5)
+      z   = 1.-x-y
+      call opacit(ro,t, x, z, fkappa,opr,opt)
+      call termo(ro,t,x,y,ionful,res)
+
+c                                 --- name some results of "termo"
+           p      = res(1)
+           dpro   = res(2)
+           dpt    = res(3)
+           cp     = res(5)
+           q      = res(7)
+           gradad = res(8)
+           error  = res(14)
+c                                 --- find max. error from thermodyn. identity
+           if (error.gt.ermax) ermax = error
+
+      yy(3)= fcon3/ro/r**3
+      yy(4)= -fcon3*fln10*fkappa/r**2
+      yy(5)=-1.0
+      yy(6)= -r**2
+
+c --------------------------------------------------- ROTATION
+      frot=1.0d0-fcoro*r**3/fm
+c
+      dpm=-fcon2*fm/r**4/p*frot                       ! ---- WITH ROTATION
+      prad=arad/3.0*t**4
+      gradra=fcon1*fkappa*p/prad/fm/frot              ! ---- WITH ROTATION
+c                                 --- Eddington approx., extended atmosphere
+c  see B. Paczynski, 1969, Acta Astr., vol. 19, 1.
+c
+      if (tau.lt.tauf) then
+          a=fcon4*sqrt(r)*(1-tau/tauf)/ro/fm*t**3
+          dpm=dpm*(1.+a)
+          gradra=gradra*(1.+0.25d0/fcon1*fm/fkappa*a)/(1+a)
+      end if
+c                                 --- mixing length theory
+      if (gradra.lt.gradad.or.alfa.lt.1.0d-7) then
+         grad=gradra
+         vt=0.0
+      else
+c         g=fcon5*fm/r**2
+         g=fcon5*fm/r**2*frot                         ! ---- WITH ROTATION
+         hp=p/ro/g
+         flt=alfa*hp
+         omega=fkappa*ro*flt
+         a=9./8.*omega**2/(3.+omega**2)
+         gamma=3.d0/64./sigcst*cp*ro/t**3*omega/a
+         sqc=flt*sqrt(g*q/8./hp)
+         sqg=sqrt(gradra-gradad)
+         v=1./gamma/sqc/sqg
+c                                 --- now solving cubic equation
+c                                     2 a ya**3 + v ya**2 + v**2 ya - v = 0
+         call cubic(a,v,ya)
+c
+         vt=sqc*sqg*ya
+         grad=gradad+(gradra-gradad)*ya*(ya+v)
+      end if
+c                                 --- the effective gradient have been computed
+
+      grop=(1.-t/p*dpt*grad)/(ro/p*dpro)
+      yy(1)=grop*dpm
+      yy(2)=grad*dpm
+c                                 --- add some values to those computed by termo
+      res(16)=opt
+      res(17)=opr
+      res(18)=dpm
+      res(19)=gradra
+      res(20)=grad
+c                                 --- end of "rhsgob"
+      end
+c..............................................................................
+c
+      subroutine cubic(a,v,resval)
+      implicit double precision (a-h,o-z)
+c
+c subject:
+c     solve special cubic equation   2*a*x**3 + v*x**2 + v**2*x - v = 0
+c input:
+c     a, v    - parameters of the equation
+c output
+c      resval  - resulting value  
+c                (the one real and positive root, smaller than 1).
+c method:
+c     Newton iterations
+c initial guess:
+c     basing on asymptotic solutions:   x = (v/2/a)**(1/3)  when v small
+c                                       x = 1/v             when v large
+c accuracy
+c     full computer accuracy can be obtained with no more than 6 iterations
+c     and usually less. Here 7 (seven) are performed...
+c..............................................................................
+c
+c                                                --- initial guess
+      x=1./((2.*a/v)**(1./3.) + v)
+c                                                --- Newton iterations
+      b=2*a/v
+      do 1 iter=1,7
+         dx=(1.-x*(v+x*(1.+b*x)))/(v+x*(2.+3.*b*x))
+         x=x+dx
+    1 continue
+      resval=x
+c                                                --- end of "cubic"
+      end
+c
+c......................................................................
+c
+      subroutine gobout(xx,iunit,iprint)
+      implicit double precision (a-h,o-z)
+      include 'data.s37'
+      dimension xx(m2)
+      common /gobcom/ starm, starlu, starra, x, y, fcoro,
+     *                fcon1, fcon2, fcon3, fcon4, fcon5, ermax, ionful
+c
+c subject:
+c     to write data for "osc" program
+c input:
+c     xx = vector of functions integrated
+c     xx(1)  = log10 (density)                       [g/cm**3]
+c     xx(2)  = log10 (temperature)                   [K]
+c     xx(3)  = log10 (radius)                        [cm]
+c     xx(4)  = optical depth
+c     xx(5)  = envelope mass / star mass (xx(5) = 0 at the surface,
+c                                         xx(5) = 1 at the center)
+c             This fractional mass is an independent variable.
+c     iunit = output unit
+c     iprint = if iprint>0 then write results; do nothing in the other case
+c     yy     = vector of right hand sides of the equations,
+c              containing derivatives of "xx" over fractional mass.
+c     extra    = vector of some additional values.
+c     extra(1)..extra(14) computed in the subroutine "termo",see there.
+c     extra(16)= opt = d ln(kappa) /d ln(t)
+c     extra(17)= opr = d ln(kappa) /d ln(ro)
+c     extra(18)= dpm   = d log10(p) / d (mass fraction)
+c     extra(19)= radiative temperature gradient.
+c     extra(20)= temp. gradient computed according to the mixing length theory.
+c variables of /gobcom/:
+c     starm  = total stellar mass                    [g]
+c     starlu = star luminosity                       [erg/s]
+c     starra = star radius                           [cm]
+c     x      = hydrogen content                      [by mass fraction]
+c     y      = helium content                        [by mass fraction]
+c     fcon1, fcon2, fcon3, fcon4, fcon5 = constants for right hand sides.
+c     ermax  = maximum error obtained from thermodynamic identity.
+c     ionful = control variable: = 1  - full matter ionization assumed,
+c                                = 0  - ionization state to be computed.
+c variables of /heninc/ of DATA.s37:
+c     rsurf  = starra = surface radius               [cm]
+c output:
+c     write results to the "iunit"
+c..........................................................................
+
+      dimension yy(m2),extra(20), puls(13)
+      common /envcom/ puls 
+
+      if(iprint.le.0) return
+
+      call rhsgob(xx,yy,extra)
+
+      ro      = 10.**xx(1)
+      t       = 10.**xx(2)
+      r       = 10.**xx(3)
+      fm      = 1.d0-xx(5)
+      drom    = yy(1)
+      drm     = yy(3)
+      p       = extra(1)
+      dpro    = extra(2)*ro/p
+      dpt     = extra(3)*t/p
+      gradad  = extra(8)
+      opt     = extra(16)
+      opr     = extra(17)
+      dpm     = extra(18)
+      drop    = 1./dpro
+      drot    = -dpt/dpro
+      gam1    = 1./(drop + drot*gradad)
+c      gam1    = extra(13)                       ! LLNL EOS+
+      grrad   = extra(19)
+      grad    = extra(20)
+      grop    = (1.-dpt*grad)/dpro
+c                                        --- prepare data for write
+      puls(1) = log(r/rsurf)
+      puls(2) = 3.*(r/rsurf)**3/fm
+      puls(3) = -dpm/drm
+      puls(4) = 1./gam1
+      puls(5) = 4.*pi*r**3*ro/(fm*starm)
+      puls(6) = (-drom + dpm/gam1)/drm
+      puls(7) = drot
+      puls(8) = grad
+      puls(10)= gradad/grad
+      puls(11)= opt-4.0+drot*opr
+      puls(12)= grrad/grad
+      puls(13)= -sqrt(3.0*gconst*starm/rsurf**3)
+     #          *4.0*pi*r**3*p*drot/starlu/gradad
+      puls(9) = gradad*(opt-4.0)+puls(4)*opr+puls(10)
+      tfix=t
+      rofix=ro
+      t=t*1.001
+      ro=ro*(1.0+0.001*grop/grad)
+      a=gradad
+c ---------------------
+      call termo(ro,t,x,y,ionful,extra)
+c ---------------------
+      t=tfix
+      ro=rofix
+      gradad  = extra(8)
+      puls(9) = puls(9)-1000.0*(gradad-a)
+c                                        --- end of "gobout"
+      end
+c.............................................................................
+c..............................................................................
+c        This file contains the following five subroutines:
+c              - "env"    -
+c              - "gobstp" -
+c              - "rhsgob" -
+c              - "cubic"  -
+c              - "gobout" -
+c                                               end of the file "envelope.s37"
+ceeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+ceeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+ceeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
