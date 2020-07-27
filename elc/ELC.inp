@@ -1,0 +1,267 @@
+#1 New version 6 input, this line required
+!
+!  Lines starting with # or ! can be inserted anywhere
+!
+!  Units
+!
+0                        iunit
+!
+!  Parameters for light surve sampling
+!
+0                        itime
+     0.00000000          t_start (if itime=2)
+     0.00000000          t_end   (if itime=2)
+ 0.00000000              time step in days (if itime=2)
+  1.000000               dphase in degrees (if itime=0 or 1)
+!
+!  Control flags for filters and limb darkening
+!
+1                        iatm (0 for black body)
+1 1 1 0 0 0 0 0          icnU,icnB,icnV,icnR,icnI,icnJ,icnH,icnK
+3                        iRVfilt
+  1                      ilaw (1=lin., 2=log, 3=sqrt, 4=quad, 5=Kipping quad)
+  3600.0000              central wavelength for filter 1 when iatm=0
+  4500.0000              central wavelength for filter 2 when iatm=0
+  5550.0000              central wavelength for filter 3 when iatm=0
+  6700.0000              central wavelength for filter 4 when iatm=0
+  8700.0000              central wavelength for filter 5 when iatm=0
+ 12000.0000              central wavelength for filter 6 when iatm=0
+ 16200.0000              central wavelength for filter 7 when iatm=0
+ 22000.0000              central wavelength for filter 8 when iatm=0
+ 0                       Nref
+  38.36170               log10(Lx) in erg/sec, tag Lx
+0                        X-ray foreshortening switch (1 for point source)
+0                        idark1
+0                        idark2
+0                        ispotprof (0=constant, 1=linear, 2=Gaussian change in temperature profile
+0                        igrav
+0                        set to 1 to use fluxes
+!
+!  Third light parameters
+!
+  -5000.0000000000       T3 (Kelvin), tag t3
+ -5.00000000000          g3 (log(g) in c.g.s), tag g3
+   -0.1000000000000000   SA3 (ratio of body 1 to body 3 areas), tag SA
+!
+!  Control flags related to speed and accuracy
+!
+     0                   Nterms for fast analytic
+0                        mandel (0 for Gimenez, 1 for Mandel & Agol)
+   0                     Ngap
+ 1                       iecheck
+0                        ism1
+0                        ifasttrans (>0 for fast transit mode)
+     0                   MonteCarlo (0 for interpolation, >10 for Monte Carlo integration)
+    0.000000             phaselow  (phase range if phaselow>0 and phasehigh>0
+    0.000000             phasehigh  and phaselow < phasehigh)
+!
+!  Control flags for Roche geometry
+!
+0                        isquare
+0                        iusepot
+    0.000000             usepot1
+    0.000000             usepot2
+!
+!  Drawing flags
+!
+0                        idraw (1 to write output drawing files)
+0                        ionephase
+    0.000000             onephase
+!
+!  Control flags for orbital elements
+!
+ 0.002050201             pshift, tag ps
+2                        ikeep (1 to put primary eclipse at phase 0.0)
+0                        isynch (1 to keep rotation synchronous at periastron)
+0                        ialign (0 for rotation aligned with orbit)
+0                        set to 1 to fit for Tconj of binary
+0                        set to 1 to fit for e*cos(omega), e*sin(omega) of binary
+!
+!  Control flags for use with optimizers
+!
+ 0                       imag (0 for input data in mag, 1 for input data in flux)
+   1                     ielite
+ 1                       ifixgamma (0, 1, 2) or (10, 11, 12)
+0                        iwriteeclipse (1 to fit for eclipse times when Nbody >=3 and itime=2)
+0                        frac switch (>1 to enable ELCratio.* files)
+0                        set to 1 to supress optimizer screen output
+0                        set to 1 to supress demcmcELC output files
+        0.00000          chi^2 threshold to write to output files
+0.0                      median fit (0 for chi^2, >0 for median)
+             0           jdum (seed for markovELC, geneticELC, randomELC, demcmcELC, hammerELC)
+!
+!  Control flags and parameters for use with the dynamical integrator (Nbody >=3)
+!
+ 0                       Ndynwin (number of segments to integrate)
+       0.000000          Tref for dynamical integrator (Nbody >=3)
+ 0.00000                 hh (step size in days)
+0                        iGR (1 for GR, 2 for tidal, 3 for both)
+0                        set to 1 for binary+binary model (use Nbody=4)
+0                        itconj (0=T_peri, 1=T_tran, 2=T_occul)
+0                        set to 1 for logarithmic mass ratios
+0                        set to 1 for planet radii in Earth radii
+0                        set to 1 to treat transits and occultations together
+0                        set to 1 for transit penalty
+0                        set to 1 for secondary eclipse penalty
+         0.0000          chi^2 penalty for transit or secondary eclipse
+0                        set to 1 for informational output (ELC only)
+!
+! Features for Kepler data
+!
+ 0.0000000000000         Kepler contamination, tag co
+0                        Iseason (1 for seasonal Kepler contamination)
+ 0.0000000000000         contamS0 (season 0 contamination, tag s0)
+ 0.0000000000000         contamS1 (season 1 contamination, tag s1)
+ 0.0000000000000         contamS2 (season 2 contamination, tag s2)
+ 0.0000000000000         contamS3 (season 3 contamination, tag s3)
+   0                     Nseg (number of segments to fit forcontamination)
+0                        set to 1 for fast Kepler binning
+   0.00000               bin size for light curves (minutes)
+   0.00000               bin size for RV curves (minutes)
+ 0                       NSC (number of short cadence intervals)
+!
+!  Number of bodies (2 to 10)
+!
+ 2                       Nbody
+!
+!  Binary orbit parameters
+!
+     5.599829000000000   Period (days), tag pe
+  3391.343560166999850   T0 (time of periastron passage), tag T0
+     0.000000000000000   Tconj (time of primary eclipse), tag Tc
+     0.0000000000000     PbpTc (period + Tconj for binary), tag bp
+     0.0000000000000     PbmTc (period - Tconj for binary), tag bm
+ -99.000000000000        binqTc (slope in P-Tc plane for binary), tag bq
+       0.000000000000    Tbinoff (offset in P-Tc plane for binary), tag bt
+0.0175400755908          eccentricity, tag ec
+  305.3859377261758      argument of periaston in degrees, tag ar
+ 0.00000000000000000     e*cos(omega), tag oc
+ 0.00000000000000000     e*sin(omega), tag os
+ 0.00000000000000000     sqrt(e)*cos(omega), tag bc
+ 0.00000000000000000     sqrt(e)*sin(omega), tag bs
+   27.1377473654932047   finc (inclination in degrees), tag in
+   0.0000000000          Omega_bin (nodal angle of binary in degrees), tag Ob
+   75.2396765544571      primK (K-velocity of star 1 in km/sec), tag pk
+   48.918711             separ (semimajor axis in solar radii), tag se
+   21.369166             gamma
+ 0.0000000               ecosw (phase difference between eclipses) tag dp
+!
+!  Body 1 parameters
+!
+  70   30                Nalph1, Nbet1
+30020.000000000          Teff1 (K), tag T1
+ 0.2500000               Tgrav1, tag g1
+ 1.0000000               alb1 (albedo of star 1), tag l1
+   1.2035771568530       omega1, tag o1
+0.9961678587015          fill1, tag f1
+     0.0000000000000     primrad (star 1 radius in solar radii), tag pr
+0.0000000000000000       frac1 (fractional radius star 1:  R_1/a), tag q1
+0.0000000000000          radfill1 (set to use fill1 in terms of R_eff)
+  31.39892513103679406   primmass (star 1 mass in solar masses), tag pm
+  27.1377474             axis_I1 (inclination of rotation axis if ialign=1), tag ai
+   0.0000000             axis_beta1 (angle of rotation axis wrt orbit if ialign=1), tag ab
+ 0.60000000  0.00000000  limb darkening coefficients, filter 1, tag x1, y1
+ 0.78600000  0.09500000  limb darkening coefficients, filter 2, tag x2, y2
+ 0.75100000  0.39000000  limb darkening coefficients, filter 3, tag x3, y3
+ 0.28420000  0.37040000  limb darkening coefficients, filter 4, tag x4, y4
+ 0.72600000  0.44400000  limb darkening coefficients, filter 5, tag x5, y5
+ 0.60000000  0.00000000  limb darkening coefficients, filter 6, tag x6, y6
+ 0.60000000  0.00000000  limb darkening coefficients, filter 7, tag x7, y7
+ 0.60000000  0.00000000  limb darkening coefficients, filter 8, tag x8, y8
+ 0.63500  0.24200        bolometric L.D. coefficients (used when Nref >= 0)
+-1.0000000               Temperature factor spot 1, star 1, tag b1
+ -1.0000000              Latitude of spot 1, star 1 (degrees), tag b2
+ -1.0000000              Longitude of spot 1, star 1 (degrees), tag b3
+ -1.0000000              Angular radius of spot 1, star 1 (degrees), tag b4
+-1.0000000               Temperature factor spot 2, star 1, tag b5
+ -1.0000000              Latitude of spot 2, star 1 (degrees), tag b6
+ -1.0000000              Longitude of spot 2, star 1 (degrees), tag b7
+ -1.0000000              Angular radius of spot 2, star 1 (degrees), tag b8
+ 0.0000000000            beam1 (Doppler boosting factor, star 1), tag e1
+0.00000000               rk1 (apsidal constant, star 1), tag a1
+       0.00000000000     flux star 1, filter 1 (need Nterms > 0), tag 11
+       0.00000000000     flux star 1, filter 2 (need Nterms > 0), tag 12
+       0.00000000000     flux star 1, filter 3 (need Nterms > 0), tag 13
+       0.00000000000     flux star 1, filter 4 (need Nterms > 0), tag 14
+       0.00000000000     flux star 1, filter 5 (need Nterms > 0), tag 15
+       0.00000000000     flux star 1, filter 6 (need Nterms > 0), tag 16
+       0.00000000000     flux star 1, filter 7 (need Nterms > 0), tag 17
+       0.00000000000     flux star 1, filter 8 (need Nterms > 0), tag 18
+!
+!  Body 2 parameters
+!
+  40   14                Nalph2, Nbet2
+-6500.000000000          Teff2 (K), tag T2
+  0.0000000000000000     temprat (T_2/T_1), tag te
+ 0.2500000               Tgrav2, tag g2
+ 1.0000000               alb2 (albedo of star 2), tag l2
+   1.0000000000000       omega2, tag o2
+0.0050000000000          fill2, tag f2
+0.0000000000000          fillsum, tag sf
+ 0.0000000000000         filldiff, tag sd
+  0.0000000000000        secrad (secondary star radius in solar radii), tag sr
+0.0000000000000000       frac2 (fractional radius star 2:  R_2/a), tag q2
+     0.0000000000000     ratrad (ratio of star 1 radius to star 2 radius,  tag ra
+     0.0000000000000     radsum (sum of radii in solar), tag rs
+     0.0000000000000     raddiff (R_1 - R_2  in solar), tag rd
+0.000000000000000        fracsum ((R_1 + R_2)/a), tag fs
+0.000000000000000        fracdiff ((R_1 - R_2)/a), tag fd
+0.0000000000000          radfill2 (set to use fill2 in terms of R_eff)
+     0.44822106639999998 Q (M_2/M_1), tag ma
+   0.000000000000000     secmass (star 2 mass in solar masses), tag sm
+   0.000000000000000     masssum (sum of masses in solar),  tag ms
+   0.000000000000000     massdiff (M_1 - M_2 in solar), tag md
+   0.0000000             axis_I2 (inclination of rotation axis if ialign=1), tag bi
+   0.0000000             axis_beta2 (angle of rotation axis wrt orbit if ialign=1), tag bb
+ 0.60000000  0.00000000  limb darkening coefficients, filter 1, tag z1, w1
+ 0.60000000  0.00000000  limb darkening coefficients, filter 2, tag z2, w2
+ 0.60000000  0.10000000  limb darkening coefficients, filter 3, tag z3, w3
+ 0.65000000  0.26900000  limb darkening coefficients, filter 4, tag z4, w4
+ 0.60000000  0.00000000  limb darkening coefficients, filter 5, tag z5, w5
+ 0.60000000  0.00000000  limb darkening coefficients, filter 6, tag z6, w6
+ 0.60000000  0.00000000  limb darkening coefficients, filter 7, tag z7, w7
+ 0.60000000  0.00000000  limb darkening coefficients, filter 8, tag z8, w8
+ 0.63500  0.24200        bolometric L.D. coefficients (used when Nref >= 0)
+-1.0000000               Temperature factor spot 1, star 2, tag c1
+ -1.0000000              Latitude of spot 1, star 2 (degrees), tag c2
+ -1.0000000              Longitude of spot 1, star 2 (degrees), tag c3
+ -1.0000000              Angular radius of spot 1, star 2 (degrees), tag c4
+-1.0000000               Temperature factor spot 2, star 2, tag c5
+ -1.0000000              Latitude of spot 2, star 2 (degrees), tag c6
+ -1.0000000              Longitude of spot 2, star 2 (degrees), tag c7
+ -1.0000000              Angular radius of spot 2, star 2 (degrees), tag c8
+ 0.0000000000            beam2 (Doppler boosting factor, star 2), tag e2
+0.00000000               rk2 (apsidal constant, star 2), tag a2
+       0.00000000000     flux star 2, filter 1 (need Nterms > 0), tag 21
+       0.00000000000     flux star 2, filter 2 (need Nterms > 0), tag 22
+       0.00000000000     flux star 2, filter 3 (need Nterms > 0), tag 23
+       0.00000000000     flux star 2, filter 4 (need Nterms > 0), tag 24
+       0.00000000000     flux star 2, filter 5 (need Nterms > 0), tag 25
+       0.00000000000     flux star 2, filter 6 (need Nterms > 0), tag 26
+       0.00000000000     flux star 2, filter 7 (need Nterms > 0), tag 27
+       0.00000000000     flux star 2, filter 8 (need Nterms > 0), tag 28
+!
+!  Accretion disk parameters
+!
+0                        idint (1 for accretion disk)
+ 90                      Ntheta
+ 60                      Nradius
+ 2.00000000              beta_rim (opening angle in degrees), tag be
+0.005000000              rinner (radius of inner hole), tag ri
+0.750000000              router (radius of outer disk), tag ro
+ 31000.000000            Tdisk (temperature of inner edge in K) tag td
+-0.750000000             xi (power-law exponent on temperature profile), tag xi
+-1.0000000000            Temperature factor spot 1, disk, tag d1
+ -1.000000000            Azimuth of spot 1, disk (degrees), tag d2
+ -1.000000000            Radial cutoff of spot 1, disk (0 <=  r_cut <=1), tag d3
+ -1.000000000            Angular size of spot 1, disk (degrees), tag d4
+-1.0000000000            Temperature factor spot 2, disk, tag d5
+ -1.000000000            Azimuth of spot 2, disk (degrees), tag d6
+ -1.000000000            Radial cutoff of spot 2, disk (0 <= r_cut <=1), tag d7
+ -1.000000000            Angular size of spot 2, disk (degrees), tag d8
+    0.000000000          reference phase for disk fraction
+!
+!  Pulsar parameters
+!
+    0.00000000000        asini (projected semimajor axis in seconds)
+ 0.0000000000            asini error
