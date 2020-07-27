@@ -11,7 +11,7 @@ Program **opac** (`OPAC.FOR` compiled by gfortran compiler) generates opacity ta
 User has the choice of hydrogen content **X** and metallicity **Z**.
 
 **opac** uses one of the four available opacity standards (extensive explanations are given in the text of the program). User has the choice. At present version standard **OPAL GN93** was chosen.
-Opacity tables `opac_7.dat` and `opac_env.dat` included in the packet were generated for X=0.7, $Z=0.03$.
+Opacity tables `opac_7.dat` and `opac_env.dat` included in the packet were generated for X=0.7, Z=0.03.
 
 ### Program zfs20055
 
