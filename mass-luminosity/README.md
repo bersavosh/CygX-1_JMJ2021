@@ -1,6 +1,6 @@
 # Stellar-evolution code
 
-For evaluating Mass-Luminosity relation for Cyg X1 (e.g., see [Ziolkowski 2014](https://ui.adsabs.harvard.edu/abs/2014MNRAS.440L..61Z/abstract)).
+For evaluating Mass-Luminosity relation for Cyg X1 (based on [Ziolkowski 2014](https://ui.adsabs.harvard.edu/abs/2014MNRAS.440L..61Z/abstract)).
 
 ## Short guide
 
