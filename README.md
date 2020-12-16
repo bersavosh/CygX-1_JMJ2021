@@ -2,7 +2,7 @@
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.3961240.svg)](https://doi.org/10.5281/zenodo.3961240)
 
-This repository contains computational material developed/utilized in [Miller-Jones et al. 2020]() to estimate the mass of the black hole in the X-ray binary Cygnus X-1.
+This repository contains computational material developed/utilized in [Miller-Jones et al. 2021]() to estimate the mass of the black hole in the X-ray binary Cygnus X-1.
 
 ## Contents
 
@@ -16,7 +16,7 @@ This repository contains computational material developed/utilized in [Miller-Jo
 - Simulations in the paper made use of the [COMPAS](http://github.com/TeamCOMPAS/COMPAS) rapid population synthesis code.
 
 ## Citation:
-If the contents of this repository have been useful for your work, please cite the journal publication ([Miller-Jones et al. 2020]()) along with the dateset's DOI (available in bibtex format below). Additionally, in case of the stellar evolution or light curve synthesis, please cite the original publications mentioned above.
+If the contents of this repository have been useful for your work, please cite the journal publication ([Miller-Jones et al. 2021]()) along with the dateset's DOI (available in bibtex format below). Additionally, in case of the stellar evolution or light curve synthesis, please cite the original publications mentioned above.
 
 ```bibtex
 @dataset{miller_jones_james_2020_3961240,

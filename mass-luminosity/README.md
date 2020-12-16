@@ -33,6 +33,8 @@ File `evol.h37` included in the packet contains data for the first 100 evolution
 
 File  `mod00100` contains the evolutionary model number 100.
 
+The folder `M-L_CygX1_output` contains the specific output files generated and used in Miller-Jones et al. 2021.
+
 ## Contact
 
 The evolutionary code was developed by B. Paczynski and M. Kozlowski. Later contributions were made by many people, among them R. Sienkiewicz, A. Pamyatnykh and J. Ziolkowski. Questions should be directed to Janusz Ziolkowski (jz@camk.edu.pl).
