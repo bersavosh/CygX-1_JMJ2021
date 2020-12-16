@@ -10,10 +10,8 @@ This repository contains computational material developed/utilized in [Miller-Jo
 - **elc** (Fortran): This folder contains the code and associated files used for light curve synthesis/fitting to estimate binary parameters, particularly the mass of the black hole and the companion star (see [Orosz et al. 2011](https://ui.adsabs.harvard.edu/abs/2011ApJ...742...84O/abstract)).
 - **mass-luminosity** (Fortran): This folder contains the code and associated files used for evaluation of mass-luminosity relation for the companion star in Cyg X-1 (see [Ziolkowski 2014](https://ui.adsabs.harvard.edu/abs/2014MNRAS.440L..61Z/abstract)).
 - **spin** (Python; requires XSPEC): This folder contains the code and associated files used for X-ray spectral simulations to estimation the black hole spin (see [Gou et al. 2011](https://ui.adsabs.harvard.edu/abs/2014ApJ...790...29G/abstract)).
+- **compass**: This folder contains the input and output files for our simulations of Cyg X-1 using the [COMPAS](http://github.com/TeamCOMPAS/COMPAS) rapid population synthesis code.
 
-## Other resources
-
-- Simulations in the paper made use of the [COMPAS](http://github.com/TeamCOMPAS/COMPAS) rapid population synthesis code.
 
 ## Citation:
 If the contents of this repository have been useful for your work, please cite the journal publication ([Miller-Jones et al. 2021]()) along with the dateset's DOI (available in bibtex format below). Additionally, in case of the stellar evolution or light curve synthesis, please cite the original publications mentioned above.
