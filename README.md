@@ -21,7 +21,7 @@ If the contents of this repository have been useful for your work, please cite t
   author       = {Miller-Jones, James and
                   Bahramian, Arash and
                   Orosz, Jerome and
-                  Mandele, Ilya and
+                  Mandel, Ilya and
                   Gou, Lijun and
                   Maccarone, Thomas and
                   Neijssel, Coenraad and
@@ -44,8 +44,8 @@ If the contents of this repository have been useful for your work, please cite t
                   Tetarenko, Alexandra and
                   Tudose, Valeriu and
                   Wilms, Joern},
-  title        = {{Emerging view of a 21-solar mass black hole in the 
-                   Milky Way}},
+  title        = {{Cygnus X-1: Emerging view of a 21-solar mass black 
+                   hole in the Milky Way}},
   month        = jul,
   year         = 2020,
   publisher    = {Zenodo},
