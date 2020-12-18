@@ -1,17 +1,17 @@
 
-COMPAS v02.17.05
+COMPAS v02.17.16
 Compact Object Mergers: Population Astrophysics and Statistics
 by Team COMPAS (http://compas.science/index.html)
 A binary star simulator
 
-Start generating stars at Wed Dec 16 19:00:18 2020
+Start generating stars at Fri Dec 18 10:28:38 2020
 
-Generated 23534 of 23534 stars requested
+Generated 1681 of 1681 stars requested
 
-End generating stars at Wed Dec 16 19:53:14 2020
+End generating stars at Fri Dec 18 10:30:31 2020
 
-Clock time = 2297.52 CPU seconds
-Wall time  = 00:52:56 (hh:mm:ss)
+Clock time = 110.598 CPU seconds
+Wall time  = 00:01:52 (hh:mm:ss)
 
 
 COMMAND LINE OPTIONS
@@ -26,6 +26,7 @@ allow-touching-at-birth = FALSE, DEFAULT_USED, BOOL
 angular-momentum-conservation-during-circularisation = FALSE, DEFAULT_USED, BOOL
 black-hole-kicks = 'FALLBACK', USER_SUPPLIED, STRING
 case-BB-stability-prescription = 'ALWAYS_STABLE', USER_SUPPLIED, STRING
+check-photon-tiring-limit = FALSE, DEFAULT_USED, BOOL
 chemically-homogeneous-evolution = 'PESSIMISTIC', USER_SUPPLIED, STRING
 circularise-binary-during-mass-transfer = FALSE, DEFAULT_USED, BOOL
 common-envelope-allow-main-sequence-survive = TRUE, USER_SUPPLIED, BOOL
@@ -99,8 +100,10 @@ logfile-rlof-parameters = 'BSE_RLOF', DEFAULT_USED, STRING
 logfile-supernovae = 'BSE_Supernovae', DEFAULT_USED, STRING
 logfile-switch-log = 'BSE_Switch_Log', DEFAULT_USED, STRING
 logfile-system-parameters = 'BSE_System_Parameters', DEFAULT_USED, STRING
-luminous-blue-variable-multiplier = 1.500000, DEFAULT_USED, DOUBLE
+luminous-blue-variable-multiplier = 1.500000, USER_SUPPLIED, DOUBLE
+luminous-blue-variable-prescription = 'BELCZYNSKI', USER_SUPPLIED, STRING
 mass-loss-prescription = 'VINK', USER_SUPPLIED, STRING
+mass-ratio = 1.000000, DEFAULT_USED, DOUBLE
 mass-ratio-distribution = 'FLAT', USER_SUPPLIED, STRING
 mass-ratio-max = 1.000000, USER_SUPPLIED, DOUBLE
 mass-ratio-min = 0.010000, USER_SUPPLIED, DOUBLE
@@ -130,11 +133,13 @@ neutrino-mass-loss-BH-formation-value = 0.100000, DEFAULT_USED, DOUBLE
 neutron-star-equation-of-state = 'SSE', USER_SUPPLIED, STRING
 number-of-systems = 20000, USER_SUPPLIED, SIGNED
 orbital-period = 0.100000, DEFAULT_USED, DOUBLE
+orbital-period-distribution = 'FLATINLOG', USER_SUPPLIED, STRING
 orbital-period-max = 1000.000000, USER_SUPPLIED, DOUBLE
 orbital-period-min = 1.100000, USER_SUPPLIED, DOUBLE
 output-container = 'Cygnus13results', USER_SUPPLIED, STRING
 output-path = '/Users/ilyam/Work/COMPAS/COMPAS/src', USER_SUPPLIED, STRING
-pair-instability-supernovae = TRUE, USER_SUPPLIED, BOOL
+overall-wind-mass-loss-multiplier = 1.000000, USER_SUPPLIED, DOUBLE
+pair-instability-supernovae = FALSE, DEFAULT_USED, BOOL
 population-data-printing = FALSE, DEFAULT_USED, BOOL
 print-bool-as-string = FALSE, DEFAULT_USED, BOOL
 pulsar-birth-magnetic-field-distribution = 'ZERO', USER_SUPPLIED, STRING
@@ -146,7 +151,7 @@ pulsar-birth-spin-period-distribution-min = 10.000000, USER_SUPPLIED, DOUBLE
 pulsar-magnetic-field-decay-massscale = 0.025000, USER_SUPPLIED, DOUBLE
 pulsar-magnetic-field-decay-timescale = 1000.000000, USER_SUPPLIED, DOUBLE
 pulsar-minimum-magnetic-field = 8.000000, USER_SUPPLIED, DOUBLE
-pulsational-pair-instability = TRUE, USER_SUPPLIED, BOOL
+pulsational-pair-instability = FALSE, DEFAULT_USED, BOOL
 pulsational-pair-instability-prescription = 'MARCHANT', USER_SUPPLIED, STRING
 quiet = FALSE, DEFAULT_USED, BOOL
 random-seed = 0, USER_SUPPLIED, UNSIGNED_LONG
@@ -163,7 +168,7 @@ switch-log = FALSE, DEFAULT_USED, BOOL
 timestep-multiplier = 1.000000, USER_SUPPLIED, DOUBLE
 use-mass-loss = TRUE, USER_SUPPLIED, BOOL
 version = FALSE, DEFAULT_USED, BOOL
-wolf-rayet-multiplier = 1.000000, DEFAULT_USED, DOUBLE
+wolf-rayet-multiplier = 1.000000, USER_SUPPLIED, DOUBLE
 zeta-adiabatic-arbitrary = 10000.000000, DEFAULT_USED, DOUBLE
 zeta-main-sequence = 2.000000, USER_SUPPLIED, DOUBLE
 zeta-radiative-envelope-giant = 6.500000, USER_SUPPLIED, DOUBLE
