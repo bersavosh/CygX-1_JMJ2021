@@ -1,3 +1,5 @@
+# COMPAS run for Cyg X-1
+
 `pythonSubmitCygnus13.py` generates the long command line on the fly and runs the code.
 
 `Cygnus13Grid.txt` contains the grid file, describing the stellar models.  
