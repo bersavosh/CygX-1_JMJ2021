@@ -10,11 +10,11 @@ This repository contains computational material developed/utilized in [Miller-Jo
 - **elc** (Fortran): This folder contains the code and associated files used for light curve synthesis/fitting to estimate binary parameters, particularly the mass of the black hole and the companion star (see [Orosz et al. 2011](https://ui.adsabs.harvard.edu/abs/2011ApJ...742...84O/abstract)).
 - **mass-luminosity** (Fortran): This folder contains the code and associated files used for evaluation of mass-luminosity relation for the companion star in Cyg X-1 (see [Ziolkowski 2014](https://ui.adsabs.harvard.edu/abs/2014MNRAS.440L..61Z/abstract)).
 - **spin** (Python; requires XSPEC): This folder contains the code and associated files used for X-ray spectral simulations to estimation the black hole spin (see [Gou et al. 2011](https://ui.adsabs.harvard.edu/abs/2014ApJ...790...29G/abstract)).
-- **compass**: This folder contains the input and output files for our simulations of Cyg X-1 using the [COMPAS](http://github.com/TeamCOMPAS/COMPAS) rapid population synthesis code.
+- **compass**: This folder contains the input and output files for our simulations of Cyg X-1 using the [COMPAS](http://github.com/TeamCOMPAS/COMPAS) rapid population synthesis code ([Stevenson et al. 2017](https://ui.adsabs.harvard.edu/abs/2017NatCo...814906S/abstract), [Vigna-Gómez et al. 2018](https://ui.adsabs.harvard.edu/abs/2018MNRAS.481.4009V/abstract)).
 
 
 ## Citation:
-If the contents of this repository have been useful for your work, please cite the journal publication ([Miller-Jones et al. 2021]()) along with the dateset's DOI (available in bibtex format below). Additionally, in case of the stellar evolution or light curve synthesis, please cite the original publications mentioned above.
+If the contents of this repository have been useful for your work, please cite the journal publication ([Miller-Jones et al. 2021]()) along with the dateset's DOI (available in bibtex format below). Additionally, in case of individual packages (ELC, Spin, mass-luminosity, COMPASS), please cite the original publications mentioned above.
 
 ```bibtex
 @dataset{miller_jones_james_2020_3961240,
