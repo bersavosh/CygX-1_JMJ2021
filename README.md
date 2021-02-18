@@ -1,4 +1,4 @@
-# Cygnus X-1: Emerging view of a 21-solar mass black hole in the Milky Way
+# Cygnus X-1 contains a 21-solar mass black hole – implications for massive star winds
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.3961240.svg)](https://doi.org/10.5281/zenodo.3961240)
 
