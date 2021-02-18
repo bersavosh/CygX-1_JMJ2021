@@ -14,7 +14,7 @@ This repository contains computational material developed/utilized in [Miller-Jo
 - **compass**: This folder contains the input and output files for our simulations of Cyg X-1 using the [COMPAS](http://github.com/TeamCOMPAS/COMPAS) rapid population synthesis code ([Stevenson et al. 2017](https://ui.adsabs.harvard.edu/abs/2017NatCo...814906S/abstract), [Vigna-Gómez et al. 2018](https://ui.adsabs.harvard.edu/abs/2018MNRAS.481.4009V/abstract)). **A detailed description of these simulations for Cyg X-1 based on the new results is now published in [Neijssel et al. 2021](https://doi.org/10.3847/1538-4357/abde4a)**.
 
 ## Citation:
-If the contents of this repository have been useful for your work, please cite the journal publication ([Miller-Jones et al. 2021]()) along with the dateset's DOI (available in bibtex format below). Additionally, in case of individual packages (ELC, Spin, mass-luminosity, COMPASS), please cite the original publications mentioned above.
+If the contents of this repository have been useful for your work, please cite the journal publication ([Miller-Jones et al. 2021](https://doi.org/10.1126/science.abb3363)) along with the dateset's DOI (available in bibtex format below). Additionally, in case of individual packages (ELC, Spin, mass-luminosity, COMPASS), please cite the original publications mentioned above.
 
 ```bibtex
 @software{miller_jones_james_2021_4548614,
