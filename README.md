@@ -16,7 +16,7 @@ This repository contains computational material developed/utilized in [Miller-Jo
 If the contents of this repository have been useful for your work, please cite the journal publication ([Miller-Jones et al. 2021]()) along with the dateset's DOI (available in bibtex format below). Additionally, in case of individual packages (ELC, Spin, mass-luminosity, COMPASS), please cite the original publications mentioned above.
 
 ```bibtex
-@dataset{miller_jones_james_2020_3961240,
+@software{miller_jones_james_2021_4548614,
   author       = {Miller-Jones, James and
                   Bahramian, Arash and
                   Orosz, Jerome and
@@ -43,13 +43,13 @@ If the contents of this repository have been useful for your work, please cite t
                   Tetarenko, Alexandra and
                   Tudose, Valeriu and
                   Wilms, Joern},
-  title        = {{Cygnus X-1: Emerging view of a 21-solar mass black 
-                   hole in the Milky Way}},
-  month        = jul,
-  year         = 2020,
+  title        = {{Cygnus X-1 contains a 21-solar mass black hole – 
+                   implications for massive star winds}},
+  month        = feb,
+  year         = 2021,
   publisher    = {Zenodo},
-  version      = {v1.0},
-  doi          = {10.5281/zenodo.3961240},
-  url          = {https://doi.org/10.5281/zenodo.3961240}
+  version      = {v2.0},
+  doi          = {10.5281/zenodo.4548614},
+  url          = {https://doi.org/10.5281/zenodo.4548614}
 }
 ```
